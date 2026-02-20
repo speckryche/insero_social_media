@@ -107,10 +107,15 @@ export function buildCategoryPrompt(category: ContentCategory, postCount: number
   const imageFields = hasImages
     ? `
 Also generate image data for posts that will have branded images. Include these fields for EVERY post (the system will decide which ones actually get images):
-- "image_headline": A short, punchy headline for the image (max 8 words)
-- "image_body": Supporting text for the image (max 15 words)
+- "image_headline": A punchy, attention-grabbing headline (3-8 words). For QUOTE_CARD templates, this should be a quote-style statement (1-2 sentences). For MYTH_BUSTER templates, this should be the myth stated clearly as a belief (e.g., "Using a broker costs more than going direct").
+- "image_body": Supporting text for the image. IMPORTANT — generate substantial content based on the template type:
+  * For CHECKLIST templates: Generate 3-5 checklist items separated by "|". Each item should be 4-8 words. Example: "Review all line items monthly|Cancel unused phone lines|Compare carrier pricing annually|Check contract renewal dates|Ask about bundling discounts"
+  * For COMPARISON templates: Generate BEFORE and AFTER content separated by "|||". Each side should have 2-3 bullet points separated by "|". Example: "Paying for 12 unused lines|No backup internet|5-year-old phone system|||Only paying for active lines|Redundant internet connection|Modern cloud phone system"
+  * For MYTH_BUSTER templates: Write 1-2 full sentences debunking the myth (20-40 words). Example: "Brokers get the same or better pricing because carriers offer them promotions. You pay nothing — the carrier pays the broker."
+  * For QUOTE_CARD templates: Write an attribution line. Example: "— Law firm, 15 employees, Portland OR"
+  * For all other templates: Write 1-2 full sentences (15-30 words), not just a short phrase.
 - "image_stat_number": A key number/stat for the image (e.g., "73%", "$4,200", "3x"). Use "" if not applicable.
-- "image_stat_label": Label for the stat (e.g., "saved per year", "of businesses"). Use "" if not applicable.`
+- "image_stat_label": Label for the stat (3-6 words, e.g., "saved per year", "of businesses overpay"). Use "" if not applicable.`
     : "";
 
   const imageFieldsJson = hasImages

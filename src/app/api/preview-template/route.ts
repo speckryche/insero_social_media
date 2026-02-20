@@ -9,41 +9,41 @@ const SAMPLE_DATA: Record<ImageTemplateType, {
   category?: string;
 }> = {
   stat_card: {
-    headline: "Small businesses lose thousands to outdated technology every year",
-    bodyText: "The right IT partner can cut costs and boost productivity overnight.",
+    headline: "Most SMBs overspend on telecom services without realizing it",
+    bodyText: "A simple audit of your voice and internet bills can reveal thousands in annual savings that add up fast.",
     statNumber: "73%",
-    statLabel: "of SMBs overspend on IT",
+    statLabel: "of SMBs overspend on telecom",
   },
   quote_card: {
-    headline: "We switched to managed IT and saved over $50K in the first year — wish we'd done it sooner.",
-    bodyText: "Real results from a real Insero client in the dental industry.",
+    headline: "We had no idea we were paying for 8 unused phone lines until Insero ran an audit. The savings were immediate and the process was painless.",
+    bodyText: "— Dental practice, 22 employees, Medford OR",
   },
   tip_graphic: {
-    headline: "Stop paying for software licenses you don't use",
-    bodyText: "Audit your subscriptions quarterly. Most businesses have 3-5 redundant tools.",
+    headline: "Stop paying for phone lines nobody uses",
+    bodyText: "Audit your telecom bills quarterly. Most businesses have 3-5 unused lines they're still paying for, often at full price.",
     category: "Industry Tip",
   },
   comparison: {
-    headline: "Managing IT in-house with constant firefighting and surprise bills",
-    bodyText: "Proactive managed IT with predictable monthly costs and zero downtime",
+    headline: "Paying for 12 unused lines|No backup internet|5-year-old phone system",
+    bodyText: "Paying for 12 unused lines|No backup internet|5-year-old phone system|||Only paying for active lines|Redundant internet connection|Modern cloud phone system",
   },
   savings_highlight: {
-    headline: "How a 12-person accounting firm cut IT costs in half",
-    bodyText: "Consolidated vendors, eliminated redundant tools, and moved to the cloud.",
+    headline: "How a 12-person accounting firm cut telecom costs in half",
+    bodyText: "Consolidated three vendors into one, eliminated redundant lines, and moved to a modern cloud phone system.",
     statNumber: "$4,200",
-    statLabel: "saved per month",
+    statLabel: "/year in savings",
   },
   myth_buster: {
-    headline: "Small businesses don't need cybersecurity — hackers only target big companies",
-    bodyText: "43% of cyberattacks target small businesses. Most lack basic protections.",
+    headline: "Using a broker costs more than going direct to the carrier",
+    bodyText: "Brokers get the same or better pricing because carriers offer them bulk promotions. You pay nothing extra — the carrier pays the broker's commission.",
   },
   did_you_know: {
-    headline: "The average employee wastes 22 minutes a day on IT issues",
-    bodyText: "That adds up to over 2 weeks of lost productivity per year per person.",
+    headline: "The average small business overpays by $400/month on telecom services they don't fully use",
+    bodyText: "That adds up to nearly $5,000 per year in wasted spend. A free audit can identify exactly where the money is going.",
   },
   checklist: {
-    headline: "5 Signs Your IT Provider Isn't Working",
-    bodyText: "Slow response times|Recurring issues never get fixed|No proactive monitoring|Surprise invoices every month|You can't reach them after hours",
+    headline: "5 Signs You're Overpaying for Telecom",
+    bodyText: "Review all line items monthly|Cancel unused phone lines|Compare carrier pricing annually|Check contract renewal dates|Ask about bundling discounts",
   },
 };
 

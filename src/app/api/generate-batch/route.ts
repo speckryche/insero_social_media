@@ -364,23 +364,23 @@ export async function POST(request: NextRequest) {
     // 6. Trim posts to fit available schedule slots (shorter months have fewer days)
     const postsToSchedule = interleaved.slice(0, schedule.length);
 
-    // Test mode template assignments: 1 specific template per post
-    const TEST_MODE_TEMPLATES: Array<{ category: ContentCategory; template: ImageTemplateType }> = [
-      { category: "did_you_know", template: "stat_card" },
-      { category: "did_you_know", template: "did_you_know" },
-      { category: "savings_story", template: "savings_highlight" },
-      { category: "savings_story", template: "quote_card" },
-      { category: "industry_tip", template: "tip_graphic" },
-      { category: "industry_tip", template: "checklist" },
-      { category: "myth_busting", template: "myth_buster" },
-      { category: "myth_busting", template: "comparison" },
-    ];
+    // Test mode template assignments: map category + index-in-category to a specific template
+    const TEST_MODE_TEMPLATES: Record<string, ImageTemplateType[]> = {
+      did_you_know: ["stat_card", "did_you_know"],
+      savings_story: ["savings_highlight", "quote_card"],
+      industry_tip: ["tip_graphic", "checklist"],
+      myth_busting: ["myth_buster", "comparison"],
+    };
 
     // 7. Combine posts with schedule, image assignment, and category
     const postsToInsert = postsToSchedule.map((item, index) => {
       const sched = schedule[index];
       const image = testMode
-        ? { has_image: true, image_template_type: TEST_MODE_TEMPLATES[index]?.template || "stat_card" }
+        ? {
+            has_image: true,
+            image_template_type:
+              TEST_MODE_TEMPLATES[item.category]?.[item.indexInCategory] || "stat_card",
+          }
         : assignImageTemplate(item.category, item.indexInCategory);
 
       return {

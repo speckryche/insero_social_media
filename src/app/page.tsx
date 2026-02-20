@@ -11,6 +11,7 @@ import {
   Layers,
   AlertTriangle,
   Loader2,
+  ClipboardCheck,
 } from "lucide-react";
 import { GenerateBatchModal } from "@/components/generate-batch-modal";
 import Link from "next/link";
@@ -154,7 +155,7 @@ export default function DashboardPage() {
       </Card>
 
       {/* Quick Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">
@@ -213,6 +214,26 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <Link href="/ready-to-post">
+          <Card className="hover:border-violet-300 transition-colors cursor-pointer h-full">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-gray-500">
+                Personal Posts
+              </CardTitle>
+              <ClipboardCheck className="h-4 w-4 text-violet-500" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">
+                {stats?.personalPostedThisMonth || 0}
+                <span className="text-sm font-normal text-gray-400">
+                  /{stats?.personalTotalThisMonth || 0}
+                </span>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">Shared this month</p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Calendar */}

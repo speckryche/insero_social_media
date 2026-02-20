@@ -114,6 +114,21 @@ export async function GET() {
       .select("*", { count: "exact", head: true })
       .eq("status", "failed");
 
+    // Personal post stats for this month
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const { count: personalPostedThisMonth } = await supabase
+      .from("posts")
+      .select("*", { count: "exact", head: true })
+      .eq("linkedin_personal_approved", true)
+      .eq("linkedin_personal_published", true)
+      .gte("scheduled_date", monthStart);
+
+    const { count: personalTotalThisMonth } = await supabase
+      .from("posts")
+      .select("*", { count: "exact", head: true })
+      .eq("linkedin_personal_approved", true)
+      .gte("scheduled_date", monthStart);
+
     return NextResponse.json({
       activeBatch,
       batchProgress,
@@ -124,6 +139,8 @@ export async function GET() {
         publishedThisMonth: publishedThisMonth || 0,
         publishedAllTime: publishedAllTime || 0,
         totalFailed: totalFailed || 0,
+        personalPostedThisMonth: personalPostedThisMonth || 0,
+        personalTotalThisMonth: personalTotalThisMonth || 0,
       },
     });
   } catch (error) {

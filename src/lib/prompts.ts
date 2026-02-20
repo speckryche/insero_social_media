@@ -9,7 +9,7 @@ ABOUT INSERO:
 - Website: www.insero.cloud
 - Phone: (844) 252-3185
 
-VOICE PROFILE — FOLLOW THESE RULES FOR EVERY POST:
+VOICE PROFILE — COMPANY PAGE (LinkedIn Company, Facebook, Google):
 - Write like you're explaining something to a smart friend — not pitching a stranger
 - Be honest first, even if it means admitting limitations. "Saving money isn't always the case" is perfectly on-brand. Never oversell.
 - Keep it conversational — contractions, short sentences, no buzzwords, no corporate jargon
@@ -17,9 +17,20 @@ VOICE PROFILE — FOLLOW THESE RULES FOR EVERY POST:
 - Never sound like a sales pitch — sound like someone who genuinely finds this stuff interesting and wants to help businesses avoid getting ripped off
 - Use "you" and "your" more than "we" and "our"
 - End posts with a thought-provoking question or observation, not a hard call-to-action every time. Mix it up.
+
+VOICE PROFILE — PERSONAL PROFILE (LinkedIn Personal):
+- Write as if you're the founder/consultant sharing a quick thought from your desk
+- Shorter than company posts — 50-150 words max
+- More casual, first-person ("I", "we" sparingly)
+- Feel like a real person's feed: observations, quick tips, hot takes
+- Skip hashtags entirely or use 1 max
+- No CTAs to the website — these feel organic, not promotional
+- Can reference "my team" or "a client we worked with" but keep it brief
+
+SHARED RULES FOR ALL POSTS:
 - NEVER use these words/phrases: "game-changer", "leverage", "synergy", "cutting-edge", "revolutionize", "unlock", "empower", "deep dive", "at the end of the day", "circle back"
 - NEVER use emojis excessively. One emoji max per post, and only when it feels natural. Many posts should have zero emojis.
-- NEVER use hashtag spam. Max 2-3 relevant hashtags per LinkedIn/Facebook post. No hashtags on X posts unless truly relevant. No hashtags on Google Business Profile.
+- NEVER use hashtag spam. Max 2-3 relevant hashtags per LinkedIn Company/Facebook post. No hashtags on X posts unless truly relevant. No hashtags on Google Business Profile.
 
 You must respond with valid JSON only. No markdown, no code fences, no extra text.`;
 
@@ -33,103 +44,115 @@ export type ContentCategory =
 export const CATEGORY_PROMPTS: Record<ContentCategory, string> = {
   did_you_know: `Generate 12 "Did You Know" social media posts.
 
-These are short, punchy facts that make business owners stop scrolling. Stats about overpaying, outage costs, redundancy gaps, telecom industry facts. These create awareness of problems they didn't know they had.
+IMPORTANT: Only use statistics that appear in the VERIFIED INDUSTRY STATISTICS section of the system prompt. Do NOT invent or estimate statistics. Each post should build around ONE verified stat.
 
-Examples of angles:
-- What percentage of businesses overpay on telecom
-- The average cost of a single hour of internet downtime
-- How many unused phone lines the average office has
-- Hidden fees in telecom contracts most people miss
-- How often carriers raise prices without notifying customers
-
-Make each post unique — vary the stats, angles, and industries referenced.`,
+Vary the angle and framing — same stat can be presented different ways across posts, but never fabricate numbers. Refer to the "WHAT WE FIND IN AUDITS" section for common scenarios to pair with stats.`,
 
   savings_story: `Generate 12 "Savings Stories" social media posts.
 
-These are anonymized case studies and scenarios showing real results. For example: "We just saved a 15-person law firm $4,200/year by finding 3 phone lines nobody was using."
+CRITICAL: Do NOT fabricate client stories or present fictional scenarios as real events. Never write "we just saved" or "looked at a client's bill yesterday" or any language implying a specific event happened unless it comes from a real example in the system prompt.
 
-Rules:
-- Use realistic but varied industries: dental offices, law firms, real estate offices, medical practices, restaurants, retail shops, accounting firms, construction companies, insurance agencies, marketing firms
-- Use realistic dollar amounts (not round thousands every time — $3,847, $6,200, $1,450/month, etc.)
-- Vary the type of savings: unused lines, better carrier pricing, bundling, contract renegotiation, switching to VoIP, adding redundancy that prevented costly downtime
-- NEVER use real client names — keep everything anonymized
-- These serve as social proof`,
+Instead, frame posts around the common findings listed in "WHAT WE FIND IN AUDITS" using language like:
+- "Here's something we see all the time..."
+- "One of the most common things we find..."
+- "A scenario that comes up more than you'd think..."
+- "This is the kind of thing that shows up in almost every review we do..."
+
+Use the verified statistics and real-world audit patterns from the system prompt. The goal is educational social proof without fabrication.`,
 
   industry_tip: `Generate 12 "Industry-Specific Tips" social media posts.
 
-Each post targets a specific business vertical with relevant, practical telecom advice.
+Each post targets a specific business vertical with relevant, practical telecom advice. Mix across these industries: dental, legal, real estate, medical, restaurants, retail, accounting, construction.
 
-Target these industries (mix them across the 12 posts):
-- Dental offices (practice management software, patient communication, VoIP for appointment reminders)
-- Law firms (reliability for client calls, call recording compliance, redundancy)
-- Real estate offices (mobile integration, multiple location connectivity)
-- Medical practices (HIPAA compliance, EHR systems, reliable fax-over-IP)
-- Restaurants (POS system connectivity, guest WiFi, online ordering reliability)
-- Retail shops (payment processing, inventory systems, multi-location)
-- Accounting firms (tax season bandwidth, secure file transfer, VoIP)
-- Construction companies (field office connectivity, mobile solutions)
+IMPORTANT: Do NOT fabricate scenarios. Never write "talked to a dentist yesterday" or "had a client call last week." Instead, frame as educational:
+- "If you run a dental practice, here's something worth thinking about..."
+- "Something a lot of medical offices don't realize..."
+- "For law firms, this one comes up a lot..."
 
-Make the advice specific and practical — not generic "you need good internet" type content.`,
+Use the services, expertise, and talking points from the system prompt to provide specific, practical advice — not generic "you need good internet" content.`,
 
   myth_busting: `Generate 12 "Myth-Busting" social media posts.
 
-Each post addresses a common misconception about business telecom. These establish authority and build trust.
+Use the COMMON OBJECTIONS section in the system prompt as source material — those are real objections that actually come up.
 
-Myths to bust (vary across posts):
-- "You have to wait until your contract expires to start shopping"
-- "Business class internet is always better than residential"
-- "The cheapest option is always the best value"
-- "You need an on-premise phone system for reliability"
-- "Your carrier's bundle deal is the best you can get"
-- "Switching phone systems means changing your number"
-- "VoIP isn't reliable enough for business"
-- "You need IT staff to manage modern phone systems"
-- "All internet providers are basically the same"
-- "Fiber is always better than cable"
-- "Your carrier rep always has your best interest in mind"
-- "Small businesses don't need internet redundancy"
+IMPORTANT: Do NOT fabricate conversations. Never write "had someone tell me last week" or "a prospect said to me yesterday." Instead, frame as common misconceptions:
+- "One thing I hear a lot is..."
+- "A common assumption people make is..."
+- "There's this idea out there that..."
 
-Frame each as: here's what people think → here's the reality → here's what you should actually consider.`,
+Frame each as: common belief → the reality → what to actually consider. Be direct but not aggressive. Make the reader feel smart for learning the truth.`,
 
   personal_take: `Generate 12 "Personal Takes / Behind the Scenes" social media posts.
 
-These humanize the brand. They're observations, opinions, and stories from working in the telecom consulting industry.
+These are the most human posts — observations, opinions, and honest takes from someone with 25 years in the telecom industry.
 
-Angles to cover (vary across posts):
-- Frustrating carrier experiences (without naming specific carriers negatively)
-- What we commonly find when auditing bills
-- Trends in business telecom
-- Why redundancy matters more than people think
-- The most common mistake businesses make with their telecom
-- What surprised us about a recent audit
-- How the industry has changed
-- Why we became carrier-agnostic instead of working for one carrier
-- The difference between what carriers promise and what they deliver
-- Small things that make a big difference in business connectivity
-- Honest observations about pricing, service, and support in the industry
+CRITICAL: Do NOT fabricate events, conversations, or scenarios. Never write "just got off the phone with" or "happened to me today" or "looked at a bill yesterday."
 
-These should feel like genuine thoughts from someone who works in this space every day — not marketing content.`,
+Instead, use:
+- General observations: "Something I've noticed after 25 years in this industry..."
+- Honest opinions: "Here's a thing about telecom that drives me crazy..."
+- General patterns: "I can't tell you how many times I've seen..."
+- Industry commentary and the owner's core beliefs from the system prompt
+
+These should feel like genuine thoughts — not fabricated stories. Use the voice examples in the system prompt as calibration for tone and length.`,
 };
 
-export function buildCategoryPrompt(category: ContentCategory): string {
-  return `${CATEGORY_PROMPTS[category]}
+export type ImageCategory = "did_you_know" | "savings_story" | "industry_tip" | "myth_busting";
 
-For each of the 12 posts, generate FOUR platform-specific versions:
+const IMAGE_CATEGORIES: ContentCategory[] = ["did_you_know", "savings_story", "industry_tip", "myth_busting"];
 
-1. linkedin_content: 150-300 words. Use line breaks for readability. Professional but conversational. 2-3 hashtags max at the end. Include a CTA to www.insero.cloud/audit in about 30% of posts (3-4 out of 12).
+export function buildCategoryPrompt(category: ContentCategory, postCount: number = 12): string {
+  const hasImages = IMAGE_CATEGORIES.includes(category);
 
-2. x_content: Under 280 characters. Punchy, direct, no hashtags unless truly relevant. The single best sentence or thought from the LinkedIn version. Never include URLs.
+  const imageFields = hasImages
+    ? `
+Also generate image data for posts that will have branded images. Include these fields for EVERY post (the system will decide which ones actually get images):
+- "image_headline": A short, punchy headline for the image (max 8 words)
+- "image_body": Supporting text for the image (max 15 words)
+- "image_stat_number": A key number/stat for the image (e.g., "73%", "$4,200", "3x"). Use "" if not applicable.
+- "image_stat_label": Label for the stat (e.g., "saved per year", "of businesses"). Use "" if not applicable.`
+    : "";
 
-3. facebook_content: 100-200 words. Slightly more casual than LinkedIn. 1-2 hashtags max. Ask questions to encourage comments in some posts.
+  const imageFieldsJson = hasImages
+    ? `,
+  "image_headline": "...",
+  "image_body": "...",
+  "image_stat_number": "...",
+  "image_stat_label": "..."`
+    : "";
 
-4. google_content: 80-150 words. Informative and local-business focused. Include a CTA to call (844) 252-3185 or visit www.insero.cloud in about 50% of posts (5-6 out of 12). No hashtags.
+  // Adjust CTA frequencies based on post count
+  const linkedinCtaNote = postCount <= 3
+    ? "Include a CTA to www.insero.cloud/audit in 1 of the posts."
+    : `Include a CTA to www.insero.cloud/audit in about 30% of posts (${Math.round(postCount * 0.3)} out of ${postCount}).`;
+  const googleCtaNote = postCount <= 3
+    ? "Include a CTA to call (844) 252-3185 or visit www.insero.cloud in 1 of the posts."
+    : `Include a CTA to call (844) 252-3185 or visit www.insero.cloud in about 50% of posts (${Math.round(postCount * 0.5)} out of ${postCount}).`;
 
-Respond with a JSON array of 12 objects. Each object must have exactly these fields:
+  // Use the base category prompt but replace "Generate 12" with actual count
+  const categoryPrompt = CATEGORY_PROMPTS[category].replace(/Generate 12/g, `Generate ${postCount}`);
+
+  return `${categoryPrompt}
+
+For each of the ${postCount} posts, generate FIVE platform-specific versions:
+
+1. linkedin_content: 150-300 words. Use line breaks for readability. Professional but conversational. 2-3 hashtags max at the end. ${linkedinCtaNote} This is for the COMPANY PAGE — use the company voice profile.
+
+2. linkedin_personal_content: 50-150 words. Casual, first-person voice. No CTAs to website. Skip hashtags or use 1 max. This is for a PERSONAL PROFILE — use the personal voice profile. Should feel like a quick thought, not a polished post.
+
+3. x_content: Under 280 characters. Punchy, direct, no hashtags unless truly relevant. The single best sentence or thought from the LinkedIn version. Never include URLs.
+
+4. facebook_content: 100-200 words. Slightly more casual than LinkedIn. 1-2 hashtags max. Ask questions to encourage comments in some posts.
+
+5. google_content: 80-150 words. Informative and local-business focused. ${googleCtaNote} No hashtags.
+${imageFields}
+Respond with a JSON array of ${postCount} objects. Each object must have exactly these fields:
 {
   "linkedin_content": "...",
+  "linkedin_personal_content": "...",
   "x_content": "...",
   "facebook_content": "...",
-  "google_content": "..."
+  "google_content": "..."${imageFieldsJson}
 }
 
 Return ONLY the JSON array. No markdown fences, no explanation, no extra text.`;

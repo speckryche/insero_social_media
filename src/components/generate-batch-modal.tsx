@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Plus, Sparkles } from "lucide-react";
 
 const MONTHS = [
@@ -47,6 +48,7 @@ export function GenerateBatchModal() {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(String(defaultMonth));
   const [year, setYear] = useState(String(defaultYear));
+  const [testMode, setTestMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [progressIndex, setProgressIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export function GenerateBatchModal() {
       setProgressIndex((prev) =>
         prev < PROGRESS_MESSAGES.length - 1 ? prev + 1 : prev
       );
-    }, 8000);
+    }, 60000);
 
     try {
       const res = await fetch("/api/generate-batch", {
@@ -70,6 +72,7 @@ export function GenerateBatchModal() {
         body: JSON.stringify({
           month: parseInt(month),
           year: parseInt(year),
+          testMode,
         }),
       });
 
@@ -94,7 +97,7 @@ export function GenerateBatchModal() {
   const years = [currentYear, currentYear + 1];
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!loading) setOpen(v); }}>
+    <Dialog open={open} onOpenChange={(v) => { if (!loading || error) { setOpen(v); setLoading(false); setError(null); } }}>
       <DialogTrigger asChild>
         <Button
           size="lg"
@@ -105,18 +108,18 @@ export function GenerateBatchModal() {
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
-        {loading ? (
+        {loading && !error ? (
           <div className="flex flex-col items-center py-10 gap-4">
             <Loader2 className="h-10 w-10 text-blue-600 animate-spin" />
             <div className="text-center">
               <p className="font-medium text-gray-900">
-                Generating 60 posts...
+                {testMode ? "Generating 5 test posts..." : "Generating 60 posts..."}
               </p>
               <p className="text-sm text-gray-500 mt-1">
                 {PROGRESS_MESSAGES[progressIndex]}
               </p>
               <p className="text-xs text-gray-400 mt-3">
-                This takes about 30-60 seconds
+                {testMode ? "This should take about 2 minutes" : "This can take up to 10 minutes"}
               </p>
             </div>
           </div>
@@ -128,8 +131,9 @@ export function GenerateBatchModal() {
                 Generate New Batch
               </DialogTitle>
               <DialogDescription>
-                Generate 60 AI-written posts (2 per day for 30 days). You can
-                review and edit them before approving.
+                {testMode
+                  ? "Generate 5 test posts (1 per category) to review content quality before committing to a full batch."
+                  : "Generate 60 AI-written posts (2 per day for 30 days). You can review and edit them before approving."}
               </DialogDescription>
             </DialogHeader>
 
@@ -167,6 +171,17 @@ export function GenerateBatchModal() {
                 </div>
               </div>
 
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="testMode"
+                  checked={testMode}
+                  onCheckedChange={(checked) => setTestMode(checked === true)}
+                />
+                <Label htmlFor="testMode" className="text-sm font-normal cursor-pointer">
+                  Test mode (5 posts — 1 per category, faster generation)
+                </Label>
+              </div>
+
               {error && (
                 <p className="text-sm text-red-600 bg-red-50 rounded-md p-3">
                   {error}
@@ -177,7 +192,7 @@ export function GenerateBatchModal() {
                 onClick={handleGenerate}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
-                Generate 60 Posts
+                {testMode ? "Generate 5 Test Posts" : "Generate 60 Posts"}
               </Button>
             </div>
           </>

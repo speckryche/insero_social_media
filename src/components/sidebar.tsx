@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Layers, Settings, Menu, ScrollText } from "lucide-react";
+import { LayoutDashboard, Layers, Settings, Menu, ScrollText, ClipboardCheck } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/batches", label: "Batches", icon: Layers },
+  { href: "/ready-to-post", label: "Ready to Post", icon: ClipboardCheck },
   { href: "/logs", label: "Publish Log", icon: ScrollText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

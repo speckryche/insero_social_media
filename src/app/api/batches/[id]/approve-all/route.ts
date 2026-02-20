@@ -15,10 +15,14 @@ export async function POST(
   try {
     const supabase = getSupabase();
 
-    // Approve all posts in the batch
+    // Approve all posts in the batch (status + both LinkedIn approval flags)
     const { error: postsError } = await supabase
       .from("posts")
-      .update({ status: "approved" })
+      .update({
+        status: "approved",
+        linkedin_personal_approved: true,
+        linkedin_company_approved: true,
+      })
       .eq("batch_id", params.id);
 
     if (postsError) {

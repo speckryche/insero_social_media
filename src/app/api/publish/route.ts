@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { publishPost } from "@/lib/publishers";
+import { publishPost, publishPersonalPost } from "@/lib/publishers";
 
 function getSupabase() {
   return createClient(
@@ -109,9 +109,17 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. Publish each post
+    const autoPublishPersonal = settings.auto_publish_personal || false;
     const results = [];
+
     for (const post of postsToPublish) {
       const result = await publishPost(post);
+
+      // If auto_publish_personal is enabled, also publish personal content
+      if (autoPublishPersonal && post.linkedin_personal_content && post.linkedin_personal_approved) {
+        await publishPersonalPost(post);
+      }
+
       results.push({
         postNumber: post.post_number,
         timeSlot: post.time_slot,

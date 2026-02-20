@@ -223,6 +223,74 @@ async function uploadLinkedInImage(
   }
 }
 
+export async function publishAsPersonal(
+  content: string,
+  imageUrl?: string
+): Promise<PublishResult> {
+  try {
+    const accessToken = await getAccessToken();
+    const personUrn = `urn:li:person:${process.env.LINKEDIN_PERSON_URN}`;
+    const version = getLinkedInVersion();
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "X-Restli-Protocol-Version": "2.0.0",
+      "LinkedIn-Version": version,
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body: any = {
+      author: personUrn,
+      commentary: content,
+      visibility: "PUBLIC",
+      distribution: {
+        feedDistribution: "MAIN_FEED",
+        targetEntities: [],
+        thirdPartyDistributionChannels: [],
+      },
+      lifecycleState: "PUBLISHED",
+      isReshareDisabledByAuthor: false,
+    };
+
+    if (imageUrl) {
+      const imageUrn = await uploadLinkedInImage(
+        accessToken,
+        personUrn,
+        imageUrl,
+        version
+      );
+      if (imageUrn) {
+        body.content = {
+          media: {
+            altText: "Insero Social Hub post image",
+            id: imageUrn,
+          },
+        };
+      }
+    }
+
+    const res = await fetch("https://api.linkedin.com/rest/posts", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      return { success: false, error: `LinkedIn Personal API error (${res.status}): ${errorText}` };
+    }
+
+    const postId = res.headers.get("x-restli-id") || undefined;
+    return { success: true, postId };
+  } catch (error) {
+    return {
+      success: false,
+      error: `LinkedIn Personal publish failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
 export async function testConnection(): Promise<{
   success: boolean;
   message: string;

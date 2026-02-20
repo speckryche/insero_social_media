@@ -40,6 +40,8 @@ import {
   Eye,
   Trash2,
   Pause,
+  Building2,
+  User,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -115,6 +117,7 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [previewingPost, setPreviewingPost] = useState<Post | null>(null);
+  const [regeneratingImageId, setRegeneratingImageId] = useState<string | null>(null);
 
   const approvedCount = posts.filter(
     (p) => p.status === "approved" || p.status === "scheduled" || p.status === "published"
@@ -143,7 +146,40 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
       if (res.ok) {
         const updatedBatch = await res.json();
         setBatch(updatedBatch);
-        setPosts(posts.map((p) => ({ ...p, status: "approved" })));
+        setPosts(posts.map((p) => ({
+          ...p,
+          status: "approved",
+          linkedin_company_approved: true,
+          linkedin_personal_approved: true,
+        })));
+      }
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function handleApproveCompany() {
+    setLoadingAction("approve-company");
+    try {
+      const res = await fetch(`/api/batches/${batch.id}/approve-company`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        setPosts(posts.map((p) => ({ ...p, linkedin_company_approved: true })));
+      }
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  async function handleApprovePersonal() {
+    setLoadingAction("approve-personal");
+    try {
+      const res = await fetch(`/api/batches/${batch.id}/approve-personal`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        setPosts(posts.map((p) => ({ ...p, linkedin_personal_approved: true })));
       }
     } finally {
       setLoadingAction(null);
@@ -162,7 +198,12 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
         setPosts(
           posts.map((p) =>
             p.status === "draft" || p.status === "edited"
-              ? { ...p, status: "approved" }
+              ? {
+                  ...p,
+                  status: "approved",
+                  linkedin_company_approved: true,
+                  linkedin_personal_approved: true,
+                }
               : p
           )
         );
@@ -192,8 +233,12 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
     }
   }
 
-  async function handleToggleApprove(postId: string) {
-    const res = await fetch(`/api/posts/${postId}/approve`, { method: "POST" });
+  async function handleToggleApprove(postId: string, type?: "personal" | "company") {
+    const res = await fetch(`/api/posts/${postId}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type }),
+    });
     if (res.ok) {
       const updated = await res.json();
       setPosts(posts.map((p) => (p.id === postId ? updated : p)));
@@ -212,6 +257,21 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
       }
     } finally {
       setRegeneratingId(null);
+    }
+  }
+
+  async function handleRegenerateImage(postId: string) {
+    setRegeneratingImageId(postId);
+    try {
+      const res = await fetch(`/api/posts/${postId}/regenerate-image`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setPosts(posts.map((p) => (p.id === postId ? updated : p)));
+      }
+    } finally {
+      setRegeneratingImageId(null);
     }
   }
 
@@ -333,14 +393,67 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                     <AlertDialogTitle>Approve remaining posts?</AlertDialogTitle>
                     <AlertDialogDescription>
                       This will approve all posts that are still in draft or
-                      edited status. Posts you&apos;ve already approved individually
-                      won&apos;t be affected.
+                      edited status (both personal and company versions).
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={handleApproveRemaining}>
                       Approve Remaining
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={loadingAction !== null}
+                  >
+                    <Building2 className="h-4 w-4 mr-1.5" />
+                    Approve All Company
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Approve all company posts?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will approve the LinkedIn Company Page version for all posts.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleApproveCompany}>
+                      Approve Company
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={loadingAction !== null}
+                  >
+                    <User className="h-4 w-4 mr-1.5" />
+                    Approve All Personal
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Approve all personal posts?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will approve the LinkedIn Personal Profile version for all posts.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleApprovePersonal}>
+                      Approve Personal
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -365,9 +478,8 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Approve all 60 posts?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will set all posts to approved and mark the batch as
-                      ready for activation. You can still edit individual posts
-                      after approving.
+                      This will set all posts to approved (both personal and company
+                      versions) and mark the batch as ready for activation.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -403,7 +515,7 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                   <AlertDialogDescription>
                     This will begin automatic posting to all platforms (LinkedIn,
                     X, Facebook, Google Business Profile) according to the
-                    schedule. Are you sure?
+                    schedule. Personal profile posts will appear in Ready to Post.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -597,11 +709,86 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
               </div>
             </CardHeader>
             <CardContent className="px-5 pb-4">
-              <Tabs defaultValue="linkedin" className="w-full">
-                <TabsList className="grid w-full grid-cols-4 h-8">
-                  <TabsTrigger value="linkedin" className="text-xs">
-                    LinkedIn
-                  </TabsTrigger>
+              {/* LinkedIn Personal & Company side by side */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <div className="border rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-blue-600" />
+                      <span className="text-xs font-medium text-gray-700">LinkedIn Personal</span>
+                    </div>
+                    <Button
+                      variant={post.linkedin_personal_approved ? "default" : "outline"}
+                      size="sm"
+                      className={`text-xs h-6 px-2 ${
+                        post.linkedin_personal_approved
+                          ? "bg-green-600 hover:bg-green-700"
+                          : ""
+                      }`}
+                      onClick={() => handleToggleApprove(post.id, "personal")}
+                    >
+                      <CheckCircle2 className="h-3 w-3 mr-0.5" />
+                      {post.linkedin_personal_approved ? "Approved" : "Approve"}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-gray-700 whitespace-pre-line line-clamp-4">
+                    {post.linkedin_personal_content || "No personal content"}
+                  </p>
+                </div>
+                <div className="border rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 text-blue-600" />
+                      <span className="text-xs font-medium text-gray-700">LinkedIn Company</span>
+                    </div>
+                    <Button
+                      variant={post.linkedin_company_approved ? "default" : "outline"}
+                      size="sm"
+                      className={`text-xs h-6 px-2 ${
+                        post.linkedin_company_approved
+                          ? "bg-green-600 hover:bg-green-700"
+                          : ""
+                      }`}
+                      onClick={() => handleToggleApprove(post.id, "company")}
+                    >
+                      <CheckCircle2 className="h-3 w-3 mr-0.5" />
+                      {post.linkedin_company_approved ? "Approved" : "Approve"}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-gray-700 whitespace-pre-line line-clamp-4">
+                    {post.linkedin_content}
+                  </p>
+                </div>
+              </div>
+
+              {/* Image thumbnail preview */}
+              {post.has_image && post.linkedin_image_url && (
+                <div className="mb-3 flex items-center gap-3">
+                  <img
+                    src={post.linkedin_image_url}
+                    alt="Post image"
+                    className="h-16 w-auto rounded border"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => handleRegenerateImage(post.id)}
+                    disabled={regeneratingImageId === post.id}
+                  >
+                    {regeneratingImageId === post.id ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    Regenerate Image
+                  </Button>
+                </div>
+              )}
+
+              {/* Other platform tabs */}
+              <Tabs defaultValue="x" className="w-full">
+                <TabsList className="grid w-full grid-cols-3 h-8">
                   <TabsTrigger value="x" className="text-xs">
                     X
                   </TabsTrigger>
@@ -612,11 +799,6 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                     Google
                   </TabsTrigger>
                 </TabsList>
-                <TabsContent value="linkedin" className="mt-3">
-                  <p className="text-sm text-gray-700 whitespace-pre-line">
-                    {post.linkedin_content}
-                  </p>
-                </TabsContent>
                 <TabsContent value="x" className="mt-3">
                   <p className="text-sm text-gray-700">{post.x_content}</p>
                   <p className="text-xs text-gray-400 mt-1">

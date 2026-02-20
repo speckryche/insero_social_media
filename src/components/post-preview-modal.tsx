@@ -27,16 +27,41 @@ export function PostPreviewModal({ post, onClose }: PostPreviewModalProps) {
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="linkedin" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 h-9">
-            <TabsTrigger value="linkedin" className="text-xs">LinkedIn</TabsTrigger>
+        <Tabs defaultValue="linkedin-personal" className="w-full">
+          <TabsList className="grid w-full grid-cols-5 h-9">
+            <TabsTrigger value="linkedin-personal" className="text-xs">Personal</TabsTrigger>
+            <TabsTrigger value="linkedin-company" className="text-xs">Company</TabsTrigger>
             <TabsTrigger value="x" className="text-xs">X</TabsTrigger>
             <TabsTrigger value="facebook" className="text-xs">Facebook</TabsTrigger>
             <TabsTrigger value="google" className="text-xs">Google</TabsTrigger>
           </TabsList>
 
           <ScrollArea className="h-[50vh] mt-3">
-            <TabsContent value="linkedin" className="mt-0">
+            <TabsContent value="linkedin-personal" className="mt-0">
+              <div className="bg-white border rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center text-white text-xs font-bold">
+                    P
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Personal Profile</p>
+                    <p className="text-xs text-gray-500">Telecom Consultant at Insero</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-800 whitespace-pre-line leading-relaxed">
+                  {post.linkedin_personal_content || "No personal content"}
+                </p>
+                {post.has_image && post.linkedin_personal_image_url && (
+                  <img
+                    src={post.linkedin_personal_image_url}
+                    alt="Post image"
+                    className="w-full rounded border"
+                  />
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="linkedin-company" className="mt-0">
               <div className="bg-white border rounded-lg p-4 space-y-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-[#1B2A4A] flex items-center justify-center text-white text-xs font-bold">
@@ -50,6 +75,13 @@ export function PostPreviewModal({ post, onClose }: PostPreviewModalProps) {
                 <p className="text-sm text-gray-800 whitespace-pre-line leading-relaxed">
                   {post.linkedin_content}
                 </p>
+                {post.has_image && post.linkedin_image_url && (
+                  <img
+                    src={post.linkedin_image_url}
+                    alt="Post image"
+                    className="w-full rounded border"
+                  />
+                )}
               </div>
             </TabsContent>
 
@@ -67,6 +99,13 @@ export function PostPreviewModal({ post, onClose }: PostPreviewModalProps) {
                 <p className="text-[15px] text-gray-900 leading-snug">
                   {post.x_content}
                 </p>
+                {post.has_image && post.x_image_url && (
+                  <img
+                    src={post.x_image_url}
+                    alt="Post image"
+                    className="w-full rounded-xl border"
+                  />
+                )}
                 <div className="flex items-center justify-between pt-2 border-t text-xs text-gray-500">
                   <span
                     className={
@@ -96,6 +135,13 @@ export function PostPreviewModal({ post, onClose }: PostPreviewModalProps) {
                   <p className="text-sm text-gray-800 whitespace-pre-line">
                     {post.facebook_content}
                   </p>
+                  {post.has_image && post.facebook_image_url && (
+                    <img
+                      src={post.facebook_image_url}
+                      alt="Post image"
+                      className="w-full rounded border mt-3"
+                    />
+                  )}
                 </div>
               </div>
             </TabsContent>
@@ -116,6 +162,13 @@ export function PostPreviewModal({ post, onClose }: PostPreviewModalProps) {
                 <p className="text-sm text-gray-800 whitespace-pre-line">
                   {post.google_content}
                 </p>
+                {post.has_image && post.google_image_url && (
+                  <img
+                    src={post.google_image_url}
+                    alt="Post image"
+                    className="w-full rounded border"
+                  />
+                )}
               </div>
             </TabsContent>
           </ScrollArea>

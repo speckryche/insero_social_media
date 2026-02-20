@@ -15,10 +15,14 @@ export async function POST(
   try {
     const supabase = getSupabase();
 
-    // Approve only posts that are still draft or edited
+    // Approve only posts that are still draft or edited (both personal + company)
     const { error: postsError } = await supabase
       .from("posts")
-      .update({ status: "approved" })
+      .update({
+        status: "approved",
+        linkedin_personal_approved: true,
+        linkedin_company_approved: true,
+      })
       .eq("batch_id", params.id)
       .in("status", ["draft", "edited"]);
 

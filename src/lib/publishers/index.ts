@@ -17,11 +17,18 @@ function getSupabase() {
 interface PostData {
   id: string;
   linkedin_content: string;
+  linkedin_personal_content?: string;
   x_content: string;
   facebook_content: string;
   google_content: string;
   image_url?: string | null;
+  linkedin_image_url?: string | null;
+  x_image_url?: string | null;
+  facebook_image_url?: string | null;
+  google_image_url?: string | null;
+  linkedin_personal_image_url?: string | null;
   has_image: boolean;
+  linkedin_personal_approved?: boolean;
 }
 
 interface PublishAllResult {
@@ -50,15 +57,20 @@ async function logResult(
 
 export async function publishPost(post: PostData): Promise<PublishAllResult> {
   const supabase = getSupabase();
-  const imageUrl = post.has_image && post.image_url ? post.image_url : undefined;
+
+  // Use platform-specific image URLs when available
+  const linkedinImage = post.has_image && post.linkedin_image_url ? post.linkedin_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
+  const xImage = post.has_image && post.x_image_url ? post.x_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
+  const facebookImage = post.has_image && post.facebook_image_url ? post.facebook_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
+  const googleImage = post.has_image && post.google_image_url ? post.google_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
 
   // Run all four publishers in parallel — failures are isolated
   const [linkedinResult, xResult, facebookResult, googleResult] =
     await Promise.all([
-      linkedin.publish(post.linkedin_content, imageUrl),
-      x.publish(post.x_content, imageUrl),
-      facebook.publish(post.facebook_content, imageUrl),
-      googleBusiness.publish(post.google_content, imageUrl),
+      linkedin.publish(post.linkedin_content, linkedinImage),
+      x.publish(post.x_content, xImage),
+      facebook.publish(post.facebook_content, facebookImage),
+      googleBusiness.publish(post.google_content, googleImage),
     ]);
 
   // Log each result
@@ -104,6 +116,39 @@ export async function publishPost(post: PostData): Promise<PublishAllResult> {
   };
 }
 
+export async function publishPersonalPost(post: PostData): Promise<PublishResult> {
+  if (!post.linkedin_personal_content) {
+    return { success: false, error: "No personal content" };
+  }
+
+  const supabase = getSupabase();
+  const personalImage = post.has_image && post.linkedin_personal_image_url
+    ? post.linkedin_personal_image_url
+    : undefined;
+
+  try {
+    // Publish using personal profile — the LinkedIn publisher uses getAuthorUrn
+    // which checks settings, but for personal posts we need to force person URN
+    const result = await linkedin.publishAsPersonal(post.linkedin_personal_content, personalImage);
+
+    // Update personal post fields
+    await supabase
+      .from("posts")
+      .update({
+        linkedin_personal_published: result.success,
+        linkedin_personal_post_id: result.postId || null,
+      })
+      .eq("id", post.id);
+
+    return result;
+  } catch (error) {
+    return {
+      success: false,
+      error: `Personal publish failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
 export async function retryFailedPlatforms(
   post: PostData & {
     linkedin_published: boolean;
@@ -113,22 +158,26 @@ export async function retryFailedPlatforms(
   }
 ): Promise<PublishAllResult> {
   const supabase = getSupabase();
-  const imageUrl = post.has_image && post.image_url ? post.image_url : undefined;
+
+  const linkedinImage = post.has_image && post.linkedin_image_url ? post.linkedin_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
+  const xImage = post.has_image && post.x_image_url ? post.x_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
+  const facebookImage = post.has_image && post.facebook_image_url ? post.facebook_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
+  const googleImage = post.has_image && post.google_image_url ? post.google_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
 
   // Only retry platforms that failed
   const results: PublishAllResult = {
     linkedin: post.linkedin_published
       ? { success: true, postId: undefined }
-      : await linkedin.publish(post.linkedin_content, imageUrl),
+      : await linkedin.publish(post.linkedin_content, linkedinImage),
     x: post.x_published
       ? { success: true, postId: undefined }
-      : await x.publish(post.x_content, imageUrl),
+      : await x.publish(post.x_content, xImage),
     facebook: post.facebook_published
       ? { success: true, postId: undefined }
-      : await facebook.publish(post.facebook_content, imageUrl),
+      : await facebook.publish(post.facebook_content, facebookImage),
     google: post.google_published
       ? { success: true, postId: undefined }
-      : await googleBusiness.publish(post.google_content, imageUrl),
+      : await googleBusiness.publish(post.google_content, googleImage),
   };
 
   // Log retried platforms

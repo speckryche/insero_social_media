@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readFileSync } from "fs";
+import { join } from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import {
-  INSERO_SYSTEM_PROMPT,
   buildCategoryPrompt,
   ContentCategory,
 } from "@/lib/prompts";
+
+// Read content skill file as the single source of truth for post generation
+const CONTENT_SKILL = readFileSync(
+  join(process.cwd(), "src/lib/Insero_Content_Skill.md"),
+  "utf-8"
+);
+
+const SYSTEM_PROMPT = `${CONTENT_SKILL}
+
+You must respond with valid JSON only. No markdown, no code fences, no extra text.`;
 
 // Use service role for server-side operations
 function getSupabase() {
@@ -23,13 +34,26 @@ const CATEGORIES: ContentCategory[] = [
   "personal_take",
 ];
 
-type ImageTemplateType = "stat_card" | "quote_card" | "tip_graphic" | "comparison";
+type ImageTemplateType =
+  | "stat_card"
+  | "quote_card"
+  | "tip_graphic"
+  | "comparison"
+  | "savings_highlight"
+  | "myth_buster"
+  | "did_you_know"
+  | "checklist";
 
 interface GeneratedPost {
   linkedin_content: string;
+  linkedin_personal_content: string;
   x_content: string;
   facebook_content: string;
   google_content: string;
+  image_headline?: string;
+  image_body?: string;
+  image_stat_number?: string;
+  image_stat_label?: string;
 }
 
 function assignImageTemplate(
@@ -38,21 +62,33 @@ function assignImageTemplate(
 ): { has_image: boolean; image_template_type: ImageTemplateType | null } {
   switch (category) {
     case "did_you_know":
-      // All "Did You Know" posts get stat_card
-      return { has_image: true, image_template_type: "stat_card" };
+      // 8 of 12 get images — alternate stat_card / did_you_know
+      if (indexInCategory >= 8) return { has_image: false, image_template_type: null };
+      return {
+        has_image: true,
+        image_template_type: indexInCategory % 2 === 0 ? "stat_card" : "did_you_know",
+      };
     case "savings_story":
-      // ~50% get quote_card (6 out of 12)
+      // 6 of 12 — alternate quote_card / savings_highlight
       return indexInCategory % 2 === 0
-        ? { has_image: true, image_template_type: "quote_card" }
+        ? {
+            has_image: true,
+            image_template_type: indexInCategory % 4 === 0 ? "quote_card" : "savings_highlight",
+          }
         : { has_image: false, image_template_type: null };
     case "industry_tip":
-      // ~50% get tip_graphic (6 out of 12)
+      // 6 of 12 — alternate tip_graphic / checklist
       return indexInCategory % 2 === 1
-        ? { has_image: true, image_template_type: "tip_graphic" }
+        ? {
+            has_image: true,
+            image_template_type: indexInCategory % 4 === 1 ? "tip_graphic" : "checklist",
+          }
         : { has_image: false, image_template_type: null };
     case "myth_busting":
-      // Mostly text-only
-      return { has_image: false, image_template_type: null };
+      // 4 of 12 — myth_buster
+      return indexInCategory < 4
+        ? { has_image: true, image_template_type: "myth_buster" }
+        : { has_image: false, image_template_type: null };
     case "personal_take":
       // Always text-only
       return { has_image: false, image_template_type: null };
@@ -76,7 +112,8 @@ interface AppSettings {
 function buildSchedule(
   month: number,
   year: number,
-  settings: AppSettings
+  settings: AppSettings,
+  maxPosts: number = 60
 ): Array<{
   scheduled_date: string;
   time_slot: "morning" | "afternoon";
@@ -95,7 +132,7 @@ function buildSchedule(
   let postNumber = 1;
   const daysInMonth = new Date(year, month, 0).getDate();
 
-  for (let day = 1; day <= daysInMonth && postNumber <= 60; day++) {
+  for (let day = 1; day <= daysInMonth && postNumber <= maxPosts; day++) {
     const date = new Date(year, month - 1, day);
     const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const weekend = isWeekend(date);
@@ -117,7 +154,7 @@ function buildSchedule(
     });
 
     // Afternoon post
-    if (postNumber <= 60) {
+    if (postNumber <= maxPosts) {
       schedule.push({
         scheduled_date: dateStr,
         time_slot: "afternoon",
@@ -141,7 +178,7 @@ function interleaveCategories(
   }> = [];
 
   // Interleave: cycle through categories so content is varied day to day
-  const maxPerCategory = 12;
+  const maxPerCategory = Math.max(...Array.from(postsByCategory.values()).map(p => p.length));
   for (let i = 0; i < maxPerCategory; i++) {
     for (const category of CATEGORIES) {
       const posts = postsByCategory.get(category);
@@ -157,20 +194,21 @@ function interleaveCategories(
 async function generateCategoryPosts(
   anthropic: Anthropic,
   category: ContentCategory,
-  contentNotes?: string
+  contentNotes?: string,
+  postCount: number = 12
 ): Promise<GeneratedPost[]> {
   const systemPrompt = contentNotes
-    ? `${INSERO_SYSTEM_PROMPT}\n\nADDITIONAL GUIDANCE FROM THE USER:\n${contentNotes}`
-    : INSERO_SYSTEM_PROMPT;
+    ? `${SYSTEM_PROMPT}\n\nADDITIONAL GUIDANCE FROM THE USER:\n${contentNotes}`
+    : SYSTEM_PROMPT;
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 8000,
+    max_tokens: postCount <= 3 ? 4000 : 10000,
     system: systemPrompt,
     messages: [
       {
         role: "user",
-        content: buildCategoryPrompt(category),
+        content: buildCategoryPrompt(category, postCount),
       },
     ],
   });
@@ -189,18 +227,55 @@ async function generateCategoryPosts(
 
   const posts: GeneratedPost[] = JSON.parse(jsonText);
 
-  if (!Array.isArray(posts) || posts.length !== 12) {
+  if (!Array.isArray(posts) || posts.length === 0) {
     throw new Error(
-      `Expected 12 posts for ${category}, got ${Array.isArray(posts) ? posts.length : "non-array"}`
+      `Expected posts for ${category}, got ${Array.isArray(posts) ? "empty array" : "non-array"}`
     );
   }
 
   return posts;
 }
 
+async function generateImagesForPost(
+  postId: string,
+  imageTemplateType: string,
+  imageData: {
+    headline: string;
+    bodyText: string;
+    statNumber?: string;
+    statLabel?: string;
+    category?: string;
+  },
+  baseUrl: string
+) {
+  const platforms = ["linkedin", "x", "facebook", "google", "linkedin_personal"];
+
+  for (const platform of platforms) {
+    try {
+      await fetch(`${baseUrl}/api/generate-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postId,
+          templateType: imageTemplateType,
+          headline: imageData.headline,
+          bodyText: imageData.bodyText,
+          statNumber: imageData.statNumber,
+          statLabel: imageData.statLabel,
+          category: imageData.category,
+          platform,
+        }),
+      });
+    } catch (err) {
+      console.error(`Image generation failed for post ${postId}, platform ${platform}:`, err);
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
+  let batch: { id: string } | null = null;
   try {
-    const { month, year } = await request.json();
+    const { month, year, testMode } = await request.json();
 
     if (!month || !year || month < 1 || month > 12) {
       return NextResponse.json(
@@ -208,6 +283,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Test mode: 1 post per category = 5 total posts
+    const postsPerCategory = testMode ? 1 : 12;
 
     const supabase = getSupabase();
     const anthropic = new Anthropic({
@@ -233,19 +311,23 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Create the batch record
-    const { data: batch, error: batchError } = await supabase
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const totalPosts = testMode ? postsPerCategory * CATEGORIES.length : Math.min(60, daysInMonth * 2);
+
+    const { data: batchData, error: batchError } = await supabase
       .from("batches")
-      .insert({ month, year, status: "draft", total_posts: 60 })
+      .insert({ month, year, status: "draft", total_posts: totalPosts })
       .select()
       .single();
 
-    if (batchError || !batch) {
+    if (batchError || !batchData) {
       console.error("Batch creation error:", batchError);
       return NextResponse.json(
         { error: "Failed to create batch" },
         { status: 500 }
       );
     }
+    batch = batchData;
 
     // 2. Fetch app_settings for scheduling
     const { data: settings, error: settingsError } = await supabase
@@ -266,7 +348,7 @@ export async function POST(request: NextRequest) {
     const postsByCategory = new Map<ContentCategory, GeneratedPost[]>();
 
     for (const category of CATEGORIES) {
-      const posts = await generateCategoryPosts(anthropic, category, contentNotes);
+      const posts = await generateCategoryPosts(anthropic, category, contentNotes, postsPerCategory);
       postsByCategory.set(category, posts);
     }
 
@@ -274,15 +356,18 @@ export async function POST(request: NextRequest) {
     const interleaved = interleaveCategories(postsByCategory);
 
     // 5. Build schedule
-    const schedule = buildSchedule(month, year, settings);
+    const schedule = buildSchedule(month, year, settings, totalPosts);
 
-    // 6. Combine posts with schedule, image assignment, and category
-    const postsToInsert = interleaved.map((item, index) => {
+    // 6. Trim posts to fit available schedule slots (shorter months have fewer days)
+    const postsToSchedule = interleaved.slice(0, schedule.length);
+
+    // 7. Combine posts with schedule, image assignment, and category
+    const postsToInsert = postsToSchedule.map((item, index) => {
       const sched = schedule[index];
       const image = assignImageTemplate(item.category, item.indexInCategory);
 
       return {
-        batch_id: batch.id,
+        batch_id: batch!.id,
         post_number: sched.post_number,
         scheduled_date: sched.scheduled_date,
         scheduled_time_1: sched.scheduled_time_1,
@@ -290,38 +375,87 @@ export async function POST(request: NextRequest) {
         time_slot: sched.time_slot,
         content_category: item.category,
         linkedin_content: item.post.linkedin_content,
+        linkedin_personal_content: item.post.linkedin_personal_content,
         x_content: item.post.x_content,
         facebook_content: item.post.facebook_content,
         google_content: item.post.google_content,
         has_image: image.has_image,
         image_template_type: image.image_template_type,
+        image_headline: item.post.image_headline || null,
+        image_body: item.post.image_body || null,
+        image_stat_number: item.post.image_stat_number || null,
+        image_stat_label: item.post.image_stat_label || null,
         status: "draft",
       };
     });
 
-    // 7. Insert all posts
-    const { error: insertError } = await supabase
+    // 8. Insert all posts
+    const { data: insertedPosts, error: insertError } = await supabase
       .from("posts")
-      .insert(postsToInsert);
+      .insert(postsToInsert)
+      .select("id, has_image, image_template_type, image_headline, image_body, image_stat_number, image_stat_label, content_category");
 
     if (insertError) {
       console.error("Post insertion error:", insertError);
       // Clean up the batch if posts fail
-      await supabase.from("batches").delete().eq("id", batch.id);
+      await supabase.from("batches").delete().eq("id", batch!.id);
       return NextResponse.json(
         { error: "Failed to save posts" },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ batchId: batch.id, totalPosts: 60 });
+    // 9. Generate images for posts with has_image: true (non-blocking)
+    if (insertedPosts) {
+      const postsWithImages = insertedPosts.filter((p) => p.has_image);
+      const baseUrl = request.nextUrl.origin;
+
+      // Fire image generation but don't await — let it run in background
+      Promise.all(
+        postsWithImages.map((p) =>
+          generateImagesForPost(
+            p.id,
+            p.image_template_type,
+            {
+              headline: p.image_headline || "",
+              bodyText: p.image_body || "",
+              statNumber: p.image_stat_number || undefined,
+              statLabel: p.image_stat_label || undefined,
+              category: p.content_category,
+            },
+            baseUrl
+          ).catch((err) => {
+            console.error(`Image gen failed for post ${p.id}:`, err);
+          })
+        )
+      ).catch((err) => {
+        console.error("Batch image generation error:", err);
+      });
+    }
+
+    return NextResponse.json({ batchId: batch!.id, totalPosts: postsToSchedule.length });
   } catch (error) {
     console.error("Generation error:", error);
+
+    // Clean up the empty batch if it was created
+    if (batch?.id) {
+      const supabase = getSupabase();
+      await supabase.from("batches").delete().eq("id", batch!.id);
+    }
+
+    let message = "Unknown error occurred";
+    if (error instanceof Error) {
+      if (error.message.includes("credit balance is too low")) {
+        message = "Anthropic API credit balance is too low. Please add credits at console.anthropic.com/settings/billing";
+      } else if (error.message.includes("authentication")) {
+        message = "Anthropic API key is invalid or missing. Please check your ANTHROPIC_API_KEY in .env.local";
+      } else {
+        message = error.message;
+      }
+    }
+
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Unknown error occurred",
-      },
+      { error: message },
       { status: 500 }
     );
   }

@@ -55,6 +55,7 @@ export default function SettingsPage() {
   const [postsPerDay, setPostsPerDay] = useState("2");
   const [contentNotes, setContentNotes] = useState("");
   const [linkedinAuthorType, setLinkedinAuthorType] = useState("organization");
+  const [autoPublishPersonal, setAutoPublishPersonal] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -73,6 +74,7 @@ export default function SettingsPage() {
           setPostsPerDay(String(data.posts_per_day || 2));
           setContentNotes(data.content_notes || "");
           setLinkedinAuthorType(data.linkedin_author_type || "organization");
+          setAutoPublishPersonal(data.auto_publish_personal || false);
         }
       } finally {
         setLoading(false);
@@ -96,6 +98,7 @@ export default function SettingsPage() {
           posts_per_day: parseInt(postsPerDay),
           content_notes: contentNotes,
           linkedin_author_type: linkedinAuthorType,
+          auto_publish_personal: autoPublishPersonal,
         }),
       });
       if (res.ok) {
@@ -286,6 +289,31 @@ export default function SettingsPage() {
                 <SelectItem value="person">Personal Profile</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <Label className="text-sm font-medium">Auto-Publish Personal Posts</Label>
+              <p className="text-xs text-gray-400 mt-0.5">
+                When enabled, approved personal LinkedIn posts are published automatically by the cron job.
+                When disabled, use the &quot;Ready to Post&quot; page to manually copy and share them.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoPublishPersonal}
+              onClick={() => setAutoPublishPersonal(!autoPublishPersonal)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                autoPublishPersonal ? "bg-blue-600" : "bg-gray-200"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform ${
+                  autoPublishPersonal ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
           </div>
         </CardContent>
       </Card>

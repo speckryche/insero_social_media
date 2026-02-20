@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -31,6 +32,7 @@ interface PostEditSheetProps {
 }
 
 export function PostEditSheet({ post, onClose, onSave }: PostEditSheetProps) {
+  const [linkedinPersonal, setLinkedinPersonal] = useState(post.linkedin_personal_content || "");
   const [linkedin, setLinkedin] = useState(post.linkedin_content || "");
   const [xContent, setXContent] = useState(post.x_content || "");
   const [facebook, setFacebook] = useState(post.facebook_content || "");
@@ -41,6 +43,10 @@ export function PostEditSheet({ post, onClose, onSave }: PostEditSheetProps) {
   const [imageTemplate, setImageTemplate] = useState(
     post.image_template_type || ""
   );
+  const [imageHeadline, setImageHeadline] = useState(post.image_headline || "");
+  const [imageBody, setImageBody] = useState(post.image_body || "");
+  const [imageStatNumber, setImageStatNumber] = useState(post.image_stat_number || "");
+  const [imageStatLabel, setImageStatLabel] = useState(post.image_stat_label || "");
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
@@ -50,6 +56,7 @@ export function PostEditSheet({ post, onClose, onSave }: PostEditSheetProps) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          linkedin_personal_content: linkedinPersonal,
           linkedin_content: linkedin,
           x_content: xContent,
           facebook_content: facebook,
@@ -58,6 +65,10 @@ export function PostEditSheet({ post, onClose, onSave }: PostEditSheetProps) {
           time_slot: timeSlot,
           has_image: hasImage,
           image_template_type: hasImage ? imageTemplate || null : null,
+          image_headline: hasImage ? imageHeadline || null : null,
+          image_body: hasImage ? imageBody || null : null,
+          image_stat_number: hasImage ? imageStatNumber || null : null,
+          image_stat_label: hasImage ? imageStatLabel || null : null,
           status: "edited",
         }),
       });
@@ -135,23 +146,98 @@ export function PostEditSheet({ post, onClose, onSave }: PostEditSheetProps) {
                 <Label htmlFor="has-image">Has image</Label>
               </div>
               {hasImage && (
-                <Select value={imageTemplate} onValueChange={setImageTemplate}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select template type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="stat_card">Stat Card</SelectItem>
-                    <SelectItem value="tip_graphic">Tip Graphic</SelectItem>
-                    <SelectItem value="quote_card">Quote Card</SelectItem>
-                    <SelectItem value="comparison">Comparison</SelectItem>
-                  </SelectContent>
-                </Select>
+                <>
+                  <Select value={imageTemplate} onValueChange={setImageTemplate}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select template type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="stat_card">Stat Card</SelectItem>
+                      <SelectItem value="tip_graphic">Tip Graphic</SelectItem>
+                      <SelectItem value="quote_card">Quote Card</SelectItem>
+                      <SelectItem value="comparison">Comparison</SelectItem>
+                      <SelectItem value="savings_highlight">Savings Highlight</SelectItem>
+                      <SelectItem value="myth_buster">Myth Buster</SelectItem>
+                      <SelectItem value="did_you_know">Did You Know</SelectItem>
+                      <SelectItem value="checklist">Checklist</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Image data fields */}
+                  <div className="space-y-3 border rounded-lg p-3 bg-gray-50">
+                    <Label className="text-xs text-gray-500 uppercase">Image Data</Label>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Headline (max 8 words)</Label>
+                      <Input
+                        value={imageHeadline}
+                        onChange={(e) => setImageHeadline(e.target.value)}
+                        placeholder="e.g., 73% of businesses overpay"
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Body (max 15 words)</Label>
+                      <Input
+                        value={imageBody}
+                        onChange={(e) => setImageBody(e.target.value)}
+                        placeholder="e.g., Most don't know until an audit reveals it"
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-xs">Stat Number</Label>
+                        <Input
+                          value={imageStatNumber}
+                          onChange={(e) => setImageStatNumber(e.target.value)}
+                          placeholder="e.g., 73%"
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Stat Label</Label>
+                        <Input
+                          value={imageStatLabel}
+                          onChange={(e) => setImageStatLabel(e.target.value)}
+                          placeholder="e.g., of businesses"
+                          className="text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Image preview */}
+                    {post.linkedin_image_url && (
+                      <div className="mt-2">
+                        <Label className="text-xs text-gray-500">Current Image</Label>
+                        <img
+                          src={post.linkedin_image_url}
+                          alt="Current post image"
+                          className="mt-1 w-full rounded border"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
 
-            {/* LinkedIn */}
+            {/* LinkedIn Personal Profile */}
             <div className="space-y-2">
-              <Label>LinkedIn</Label>
+              <Label>LinkedIn Personal Profile</Label>
+              <Textarea
+                value={linkedinPersonal}
+                onChange={(e) => setLinkedinPersonal(e.target.value)}
+                rows={4}
+                className="text-sm"
+              />
+              <p className="text-xs text-gray-400">
+                {linkedinPersonal.length} characters
+              </p>
+            </div>
+
+            {/* LinkedIn Company Page */}
+            <div className="space-y-2">
+              <Label>LinkedIn Company Page</Label>
               <Textarea
                 value={linkedin}
                 onChange={(e) => setLinkedin(e.target.value)}

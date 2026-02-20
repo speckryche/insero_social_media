@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Layers, Settings, Menu, ScrollText, ClipboardCheck } from "lucide-react";
 import { useState } from "react";
@@ -46,13 +47,15 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 export function Sidebar() {
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-[#1B2A4A]">
-      <div className="flex h-16 items-center px-6">
-        <span className="text-xl font-bold text-white tracking-tight">
-          Insero
-        </span>
-        <span className="ml-1.5 text-xs font-medium text-blue-400 uppercase tracking-widest">
-          Social Hub
-        </span>
+      <div className="flex h-20 items-center px-4">
+        <Image
+          src="/Insero Logo (white) - with tagline.png"
+          alt="Insero"
+          width={200}
+          height={50}
+          className="object-contain"
+          priority
+        />
       </div>
       <div className="mt-2">
         <NavLinks />
@@ -75,13 +78,14 @@ export function MobileNav() {
         </button>
       </SheetTrigger>
       <SheetContent side="left" className="w-64 p-0 bg-[#1B2A4A] border-none">
-        <div className="flex h-16 items-center px-6">
-          <span className="text-xl font-bold text-white tracking-tight">
-            Insero
-          </span>
-          <span className="ml-1.5 text-xs font-medium text-blue-400 uppercase tracking-widest">
-            Social Hub
-          </span>
+        <div className="flex h-20 items-center px-4">
+          <Image
+            src="/Insero Logo (white) - with tagline.png"
+            alt="Insero"
+            width={200}
+            height={50}
+            className="object-contain"
+          />
         </div>
         <div className="mt-2">
           <NavLinks onNavigate={() => setOpen(false)} />

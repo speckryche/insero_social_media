@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
   const sample = SAMPLE_DATA[template];
 
   try {
-    const buffer = generatePostImage({
+    const buffer = await generatePostImage({
       templateType: template,
       headline: sample.headline,
       bodyText: sample.bodyText,

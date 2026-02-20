@@ -1,4 +1,5 @@
-import { createCanvas, GlobalFonts, type SKRSContext2D } from "@napi-rs/canvas";
+import { createCanvas, loadImage, GlobalFonts, type SKRSContext2D } from "@napi-rs/canvas";
+import { readFileSync } from "fs";
 import path from "path";
 
 // Brand colors
@@ -44,6 +45,18 @@ interface ImageOptions {
   height: number;
 }
 
+// Map template types to their PNG filenames
+const TEMPLATE_FILES: Record<ImageTemplateType, string> = {
+  stat_card: "template-stat-card.png.png",
+  quote_card: "template-quote-card.png",
+  tip_graphic: "template-tip-graphic.png",
+  comparison: "template-comparison.png",
+  savings_highlight: "template-savings-highlight.png",
+  myth_buster: "template-myth-buster.png",
+  did_you_know: "template-did-you-know.png",
+  checklist: "template-checklist.png",
+};
+
 let fontsRegistered = false;
 
 function registerFonts() {
@@ -79,16 +92,6 @@ function wrapText(ctx: SKRSContext2D, text: string, maxWidth: number): string[] 
   return lines;
 }
 
-function drawLogo(ctx: SKRSContext2D, x: number, y: number, color: string) {
-  ctx.font = '28px "Jakarta Bold"';
-  ctx.fillStyle = color;
-  ctx.fillText("INSERO", x, y);
-  const inseroWidth = ctx.measureText("INSERO").width;
-  ctx.font = '14px "Open Sans"';
-  ctx.fillStyle = color === COLORS.white ? "rgba(255,255,255,0.6)" : COLORS.mediumGray;
-  ctx.fillText("Technology. Simplified.", x + inseroWidth + 12, y);
-}
-
 function drawRoundedRect(
   ctx: SKRSContext2D,
   x: number,
@@ -110,15 +113,21 @@ function drawRoundedRect(
   ctx.closePath();
 }
 
+async function loadTemplateBackground(
+  ctx: SKRSContext2D,
+  templateType: ImageTemplateType,
+  width: number,
+  height: number
+) {
+  const fileName = TEMPLATE_FILES[templateType];
+  const templatePath = path.join(process.cwd(), "src", "assets", "templates", fileName);
+  const imageData = readFileSync(templatePath);
+  const img = await loadImage(imageData);
+  ctx.drawImage(img, 0, 0, width, height);
+}
+
 function renderStatCard(ctx: SKRSContext2D, opts: ImageOptions) {
   const { width, height, headline, bodyText, statNumber, statLabel } = opts;
-
-  // Dark background
-  ctx.fillStyle = COLORS.darkBg;
-  ctx.fillRect(0, 0, width, height);
-
-  // Logo
-  drawLogo(ctx, 60, 60, COLORS.white);
 
   // Big stat number
   ctx.font = '120px "Jakarta ExtraBold"';
@@ -156,22 +165,6 @@ function renderStatCard(ctx: SKRSContext2D, opts: ImageOptions) {
 function renderQuoteCard(ctx: SKRSContext2D, opts: ImageOptions) {
   const { width, height, headline, bodyText } = opts;
 
-  // White background
-  ctx.fillStyle = COLORS.white;
-  ctx.fillRect(0, 0, width, height);
-
-  // Left accent border
-  ctx.fillStyle = COLORS.primaryBlue;
-  ctx.fillRect(0, 0, 8, height);
-
-  // Decorative quote mark
-  ctx.font = '200px "Jakarta ExtraBold"';
-  ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
-  ctx.fillText("\u201C", 40, 180);
-
-  // Logo
-  drawLogo(ctx, 60, 60, COLORS.darkBg);
-
   // Quote text (headline)
   ctx.font = '32px "Jakarta SemiBold"';
   ctx.fillStyle = COLORS.darkText;
@@ -191,24 +184,10 @@ function renderQuoteCard(ctx: SKRSContext2D, opts: ImageOptions) {
     ctx.fillText(line, 80, yPos);
     yPos += 32;
   }
-
-  // Bottom accent
-  ctx.fillStyle = COLORS.primaryBlue;
-  ctx.fillRect(60, height - 60, 100, 4);
 }
 
 function renderTipGraphic(ctx: SKRSContext2D, opts: ImageOptions) {
   const { width, height, headline, bodyText, category } = opts;
-
-  // Blue gradient background
-  const gradient = ctx.createLinearGradient(0, 0, width, height);
-  gradient.addColorStop(0, "#1E40AF");
-  gradient.addColorStop(1, "#3B82F6");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
-
-  // Logo
-  drawLogo(ctx, 60, 60, COLORS.white);
 
   // Category pill badge
   if (category) {
@@ -221,11 +200,6 @@ function renderTipGraphic(ctx: SKRSContext2D, opts: ImageOptions) {
     ctx.fillStyle = COLORS.white;
     ctx.fillText(pillText, 76, 124);
   }
-
-  // Lightbulb icon (text fallback)
-  ctx.font = '72px "Jakarta Bold"';
-  ctx.fillStyle = "rgba(255,255,255,0.15)";
-  ctx.fillText("\u{1F4A1}", width - 160, 120);
 
   // Headline
   ctx.font = '40px "Jakarta Bold"';
@@ -249,16 +223,8 @@ function renderTipGraphic(ctx: SKRSContext2D, opts: ImageOptions) {
 }
 
 function renderComparison(ctx: SKRSContext2D, opts: ImageOptions) {
-  const { width, height, headline, bodyText } = opts;
+  const { width, headline, bodyText } = opts;
   const halfW = width / 2;
-
-  // Left side (red - before)
-  ctx.fillStyle = "#FEE2E2";
-  ctx.fillRect(0, 0, halfW, height);
-
-  // Right side (green - after)
-  ctx.fillStyle = "#DCFCE7";
-  ctx.fillRect(halfW, 0, halfW, height);
 
   // Left header
   ctx.fillStyle = COLORS.redText;
@@ -289,20 +255,10 @@ function renderComparison(ctx: SKRSContext2D, opts: ImageOptions) {
     ctx.fillText(line, halfW + 60, yPos);
     yPos += 40;
   }
-
-  // Logo at bottom center
-  drawLogo(ctx, halfW - 100, height - 50, COLORS.darkBg);
 }
 
 function renderSavingsHighlight(ctx: SKRSContext2D, opts: ImageOptions) {
   const { width, height, headline, bodyText, statNumber, statLabel } = opts;
-
-  // Dark background
-  ctx.fillStyle = COLORS.darkBg;
-  ctx.fillRect(0, 0, width, height);
-
-  // Logo
-  drawLogo(ctx, 60, 60, COLORS.white);
 
   // Large dollar amount in accent green
   ctx.font = '100px "Jakarta ExtraBold"';
@@ -343,14 +299,7 @@ function renderSavingsHighlight(ctx: SKRSContext2D, opts: ImageOptions) {
 function renderMythBuster(ctx: SKRSContext2D, opts: ImageOptions) {
   const { width, height, headline, bodyText } = opts;
 
-  // White background
-  ctx.fillStyle = COLORS.white;
-  ctx.fillRect(0, 0, width, height);
-
-  // Logo
-  drawLogo(ctx, 60, 60, COLORS.darkBg);
-
-  // MYTH pill (red with strikethrough)
+  // MYTH pill
   const mythY = height * 0.3;
   drawRoundedRect(ctx, 60, mythY - 28, 120, 40, 20);
   ctx.fillStyle = "#FEE2E2";
@@ -376,7 +325,7 @@ function renderMythBuster(ctx: SKRSContext2D, opts: ImageOptions) {
     yPos += 38;
   }
 
-  // REALITY pill (green)
+  // REALITY pill
   const realityY = yPos + 24;
   drawRoundedRect(ctx, 60, realityY - 28, 140, 40, 20);
   ctx.fillStyle = "#DCFCE7";
@@ -398,18 +347,6 @@ function renderMythBuster(ctx: SKRSContext2D, opts: ImageOptions) {
 
 function renderDidYouKnow(ctx: SKRSContext2D, opts: ImageOptions) {
   const { width, height, headline, bodyText } = opts;
-
-  // Primary blue background
-  ctx.fillStyle = COLORS.primaryBlue;
-  ctx.fillRect(0, 0, width, height);
-
-  // Question mark watermark
-  ctx.font = '400px "Jakarta ExtraBold"';
-  ctx.fillStyle = "rgba(255,255,255,0.07)";
-  ctx.fillText("?", width - 350, height * 0.7);
-
-  // Logo
-  drawLogo(ctx, 60, 60, COLORS.white);
 
   // "DID YOU KNOW?" label
   ctx.font = '20px "Jakarta Bold"';
@@ -438,14 +375,7 @@ function renderDidYouKnow(ctx: SKRSContext2D, opts: ImageOptions) {
 }
 
 function renderChecklist(ctx: SKRSContext2D, opts: ImageOptions) {
-  const { width, height, headline, bodyText } = opts;
-
-  // White background
-  ctx.fillStyle = COLORS.white;
-  ctx.fillRect(0, 0, width, height);
-
-  // Logo
-  drawLogo(ctx, 60, 60, COLORS.darkBg);
+  const { width, headline, bodyText } = opts;
 
   // Headline
   ctx.font = '36px "Jakarta Bold"';
@@ -472,10 +402,6 @@ function renderChecklist(ctx: SKRSContext2D, opts: ImageOptions) {
     ctx.fillText(item, 100, yPos);
     yPos += 44;
   }
-
-  // Bottom accent line
-  ctx.fillStyle = COLORS.primaryBlue;
-  ctx.fillRect(60, height - 40, 100, 4);
 }
 
 const RENDERERS: Record<ImageTemplateType, (ctx: SKRSContext2D, opts: ImageOptions) => void> = {
@@ -489,10 +415,13 @@ const RENDERERS: Record<ImageTemplateType, (ctx: SKRSContext2D, opts: ImageOptio
   checklist: renderChecklist,
 };
 
-export function generatePostImage(opts: ImageOptions): Buffer {
+export async function generatePostImage(opts: ImageOptions): Promise<Buffer> {
   registerFonts();
   const canvas = createCanvas(opts.width, opts.height);
   const ctx = canvas.getContext("2d");
+
+  // Load template background
+  await loadTemplateBackground(ctx, opts.templateType, opts.width, opts.height);
 
   const renderer = RENDERERS[opts.templateType];
   if (!renderer) {

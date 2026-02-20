@@ -284,8 +284,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Test mode: 1 post per category = 5 total posts
-    const postsPerCategory = testMode ? 1 : 12;
+    // Test mode: 2 posts per category (4 categories) = 8 total posts
+    const postsPerCategory = testMode ? 2 : 12;
+    const testCategories: ContentCategory[] = testMode
+      ? ["did_you_know", "savings_story", "industry_tip", "myth_busting"]
+      : CATEGORIES;
 
     const supabase = getSupabase();
     const anthropic = new Anthropic({
@@ -312,7 +315,7 @@ export async function POST(request: NextRequest) {
 
     // 1. Create the batch record
     const daysInMonth = new Date(year, month, 0).getDate();
-    const totalPosts = testMode ? postsPerCategory * CATEGORIES.length : Math.min(60, daysInMonth * 2);
+    const totalPosts = testMode ? 8 : Math.min(60, daysInMonth * 2);
 
     const { data: batchData, error: batchError } = await supabase
       .from("batches")
@@ -343,11 +346,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Generate posts — one category at a time (5 API calls)
+    // 3. Generate posts — one category at a time
     const contentNotes = settings.content_notes || "";
     const postsByCategory = new Map<ContentCategory, GeneratedPost[]>();
 
-    for (const category of CATEGORIES) {
+    for (const category of testCategories) {
       const posts = await generateCategoryPosts(anthropic, category, contentNotes, postsPerCategory);
       postsByCategory.set(category, posts);
     }
@@ -361,10 +364,24 @@ export async function POST(request: NextRequest) {
     // 6. Trim posts to fit available schedule slots (shorter months have fewer days)
     const postsToSchedule = interleaved.slice(0, schedule.length);
 
+    // Test mode template assignments: 1 specific template per post
+    const TEST_MODE_TEMPLATES: Array<{ category: ContentCategory; template: ImageTemplateType }> = [
+      { category: "did_you_know", template: "stat_card" },
+      { category: "did_you_know", template: "did_you_know" },
+      { category: "savings_story", template: "savings_highlight" },
+      { category: "savings_story", template: "quote_card" },
+      { category: "industry_tip", template: "tip_graphic" },
+      { category: "industry_tip", template: "checklist" },
+      { category: "myth_busting", template: "myth_buster" },
+      { category: "myth_busting", template: "comparison" },
+    ];
+
     // 7. Combine posts with schedule, image assignment, and category
     const postsToInsert = postsToSchedule.map((item, index) => {
       const sched = schedule[index];
-      const image = assignImageTemplate(item.category, item.indexInCategory);
+      const image = testMode
+        ? { has_image: true, image_template_type: TEST_MODE_TEMPLATES[index]?.template || "stat_card" }
+        : assignImageTemplate(item.category, item.indexInCategory);
 
       return {
         batch_id: batch!.id,

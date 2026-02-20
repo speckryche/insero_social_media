@@ -113,7 +113,7 @@ export function GenerateBatchModal() {
             <Loader2 className="h-10 w-10 text-blue-600 animate-spin" />
             <div className="text-center">
               <p className="font-medium text-gray-900">
-                {testMode ? "Generating 5 test posts..." : "Generating 60 posts..."}
+                {testMode ? "Generating 8 test posts..." : "Generating 60 posts..."}
               </p>
               <p className="text-sm text-gray-500 mt-1">
                 {PROGRESS_MESSAGES[progressIndex]}
@@ -132,7 +132,7 @@ export function GenerateBatchModal() {
               </DialogTitle>
               <DialogDescription>
                 {testMode
-                  ? "Generate 5 test posts (1 per category) to review content quality before committing to a full batch."
+                  ? "Generate 8 test posts (1 per template) to review content quality and image templates before committing to a full batch."
                   : "Generate 60 AI-written posts (2 per day for 30 days). You can review and edit them before approving."}
               </DialogDescription>
             </DialogHeader>
@@ -178,7 +178,7 @@ export function GenerateBatchModal() {
                   onCheckedChange={(checked) => setTestMode(checked === true)}
                 />
                 <Label htmlFor="testMode" className="text-sm font-normal cursor-pointer">
-                  Test mode (5 posts — 1 per category, faster generation)
+                  Test mode (8 posts — 1 per template, faster generation)
                 </Label>
               </div>
 
@@ -192,7 +192,7 @@ export function GenerateBatchModal() {
                 onClick={handleGenerate}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
-                {testMode ? "Generate 5 Test Posts" : "Generate 60 Posts"}
+                {testMode ? "Generate 8 Test Posts" : "Generate 60 Posts"}
               </Button>
             </div>
           </>

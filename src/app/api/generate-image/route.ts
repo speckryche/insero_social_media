@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate the image
-    const pngBuffer = generatePostImage({
+    const pngBuffer = await generatePostImage({
       templateType: templateType as ImageTemplateType,
       headline,
       bodyText: bodyText || "",

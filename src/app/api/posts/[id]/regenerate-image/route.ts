@@ -49,7 +49,7 @@ export async function POST(
       if (!size) continue;
 
       try {
-        const pngBuffer = generatePostImage({
+        const pngBuffer = await generatePostImage({
           templateType: post.image_template_type as ImageTemplateType,
           headline: post.image_headline || "",
           bodyText: post.image_body || "",

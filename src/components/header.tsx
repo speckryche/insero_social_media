@@ -1,6 +1,12 @@
+"use client";
+
+import { usePathname } from "next/navigation";
 import { MobileNav } from "@/components/sidebar";
 
 export function Header() {
+  const pathname = usePathname();
+  if (pathname === "/login") return null;
+
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-white px-4 md:px-6">
       <MobileNav />

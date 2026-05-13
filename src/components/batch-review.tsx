@@ -42,9 +42,12 @@ import {
   Pause,
   Building2,
   User,
+  Camera,
+  CameraOff,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Switch } from "@/components/ui/switch";
 import { PostEditSheet } from "@/components/post-edit-sheet";
 import { PostPreviewModal } from "@/components/post-preview-modal";
 
@@ -118,6 +121,8 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [previewingPost, setPreviewingPost] = useState<Post | null>(null);
   const [regeneratingImageId, setRegeneratingImageId] = useState<string | null>(null);
+  const [togglingImageId, setTogglingImageId] = useState<string | null>(null);
+  const [imageToggleError, setImageToggleError] = useState<{ id: string; message: string } | null>(null);
 
   const approvedCount = posts.filter(
     (p) => p.status === "approved" || p.status === "scheduled" || p.status === "published"
@@ -272,6 +277,75 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
       }
     } finally {
       setRegeneratingImageId(null);
+    }
+  }
+
+  async function handleToggleImage(post: Post) {
+    const turningOn = !post.has_image;
+    setTogglingImageId(post.id);
+    setImageToggleError(null);
+
+    try {
+      if (turningOn) {
+        // Can't generate an image if the post never had image content set up
+        if (!post.image_template_type) {
+          setImageToggleError({
+            id: post.id,
+            message: "This post has no image template. Regenerate the post first to add image content.",
+          });
+          return;
+        }
+
+        // Flip the flag, then render images for all platforms
+        const patchRes = await fetch(`/api/posts/${post.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ has_image: true, status: post.status }),
+        });
+        if (!patchRes.ok) {
+          setImageToggleError({ id: post.id, message: "Failed to update post" });
+          return;
+        }
+
+        const genRes = await fetch(`/api/posts/${post.id}/regenerate-image`, {
+          method: "POST",
+        });
+        if (!genRes.ok) {
+          // Roll back the flag so the UI matches reality
+          await fetch(`/api/posts/${post.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ has_image: false, status: post.status }),
+          });
+          const err = await genRes.json().catch(() => ({}));
+          setImageToggleError({ id: post.id, message: err.error || "Image generation failed" });
+          return;
+        }
+
+        const updated = await genRes.json();
+        setPosts(posts.map((p) => (p.id === post.id ? updated : p)));
+      } else {
+        // Turning OFF: clear has_image and the per-platform URLs
+        const patchRes = await fetch(`/api/posts/${post.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            has_image: false,
+            linkedin_image_url: null,
+            x_image_url: null,
+            facebook_image_url: null,
+            google_image_url: null,
+            linkedin_personal_image_url: null,
+            status: post.status,
+          }),
+        });
+        if (patchRes.ok) {
+          const updated = await patchRes.json();
+          setPosts(posts.map((p) => (p.id === post.id ? updated : p)));
+        }
+      }
+    } finally {
+      setTogglingImageId(null);
     }
   }
 
@@ -694,7 +768,25 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                   >
                     {CATEGORY_LABELS[post.content_category] || post.content_category}
                   </Badge>
-                  {post.has_image && (
+                  {/* Image status indicator — quick visual scan */}
+                  {togglingImageId === post.id ? (
+                    <span title="Image generation in progress" className="inline-flex items-center">
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                    </span>
+                  ) : post.has_image && post.linkedin_image_url ? (
+                    <span title="Image generated and ready" className="inline-flex items-center">
+                      <Camera className="h-4 w-4 text-green-600" />
+                    </span>
+                  ) : post.has_image ? (
+                    <span title="Image pending" className="inline-flex items-center">
+                      <Camera className="h-4 w-4 text-gray-400" />
+                    </span>
+                  ) : (
+                    <span title="No image for this post" className="inline-flex items-center">
+                      <CameraOff className="h-4 w-4 text-gray-300" />
+                    </span>
+                  )}
+                  {post.has_image && post.image_template_type && (
                     <Badge variant="secondary" className="text-xs gap-1">
                       <ImageIcon className="h-3 w-3" />
                       {post.image_template_type}
@@ -761,28 +853,46 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                 </div>
               </div>
 
-              {/* Image thumbnail preview */}
-              {post.has_image && post.linkedin_image_url && (
-                <div className="mb-3 flex items-center gap-3">
-                  <img
-                    src={post.linkedin_image_url}
-                    alt="Post image"
-                    className="h-16 w-auto rounded border"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => handleRegenerateImage(post.id)}
-                    disabled={regeneratingImageId === post.id}
-                  >
-                    {regeneratingImageId === post.id ? (
-                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                    )}
-                    Regenerate Image
-                  </Button>
+              {/* Image control row — toggle, status, thumbnail, regenerate */}
+              <div className="mb-3 flex items-center gap-3 flex-wrap">
+                <Switch
+                  checked={post.has_image}
+                  onCheckedChange={() => handleToggleImage(post)}
+                  disabled={togglingImageId === post.id}
+                  aria-label="Include image for this post"
+                />
+                <span className="text-xs font-medium text-gray-700">Include image</span>
+                {togglingImageId === post.id && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+                )}
+                {post.has_image && post.linkedin_image_url && (
+                  <>
+                    <img
+                      src={post.linkedin_image_url}
+                      alt="Post image"
+                      className="h-16 w-auto rounded border ml-auto"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => handleRegenerateImage(post.id)}
+                      disabled={regeneratingImageId === post.id}
+                    >
+                      {regeneratingImageId === post.id ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      Regenerate Image
+                    </Button>
+                  </>
+                )}
+              </div>
+              {imageToggleError && imageToggleError.id === post.id && (
+                <div className="mb-3 flex items-start gap-2 p-2 bg-amber-50 rounded text-xs text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>{imageToggleError.message}</span>
                 </div>
               )}
 

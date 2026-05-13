@@ -42,7 +42,11 @@ type ImageTemplateType =
   | "savings_highlight"
   | "myth_buster"
   | "did_you_know"
-  | "checklist";
+  | "checklist"
+  | "photo_landscape"
+  | "photo_tip"
+  | "photo_stat"
+  | "photo_quote";
 
 interface GeneratedPost {
   linkedin_content: string;
@@ -60,41 +64,65 @@ function assignImageTemplate(
   category: ContentCategory,
   indexInCategory: number
 ): { has_image: boolean; image_template_type: ImageTemplateType | null } {
+  // Base assignment (existing canvas-template rules)
+  let base: { has_image: boolean; image_template_type: ImageTemplateType | null };
   switch (category) {
     case "did_you_know":
-      // 8 of 12 get images — alternate stat_card / did_you_know
-      if (indexInCategory >= 8) return { has_image: false, image_template_type: null };
-      return {
-        has_image: true,
-        image_template_type: indexInCategory % 2 === 0 ? "stat_card" : "did_you_know",
-      };
+      base = indexInCategory >= 8
+        ? { has_image: false, image_template_type: null }
+        : {
+            has_image: true,
+            image_template_type: indexInCategory % 2 === 0 ? "stat_card" : "did_you_know",
+          };
+      break;
     case "savings_story":
-      // 6 of 12 — alternate quote_card / savings_highlight
-      return indexInCategory % 2 === 0
+      base = indexInCategory % 2 === 0
         ? {
             has_image: true,
             image_template_type: indexInCategory % 4 === 0 ? "quote_card" : "savings_highlight",
           }
         : { has_image: false, image_template_type: null };
+      break;
     case "industry_tip":
-      // 6 of 12 — alternate tip_graphic / checklist
-      return indexInCategory % 2 === 1
+      base = indexInCategory % 2 === 1
         ? {
             has_image: true,
             image_template_type: indexInCategory % 4 === 1 ? "tip_graphic" : "checklist",
           }
         : { has_image: false, image_template_type: null };
+      break;
     case "myth_busting":
-      // 4 of 12 — myth_buster
-      return indexInCategory < 4
+      base = indexInCategory < 4
         ? { has_image: true, image_template_type: "myth_buster" }
         : { has_image: false, image_template_type: null };
+      break;
     case "personal_take":
-      // Always text-only
-      return { has_image: false, image_template_type: null };
+      base = { has_image: false, image_template_type: null };
+      break;
     default:
-      return { has_image: false, image_template_type: null };
+      base = { has_image: false, image_template_type: null };
   }
+
+  // Photo template injection — give the feed a natural mix of photo and
+  // graphic templates. Probabilities follow the brand brief.
+  if (category === "personal_take" || category === "savings_story") {
+    // 50% photo_landscape, otherwise keep the base (which may be null)
+    if (Math.random() > 0.5) {
+      return { has_image: true, image_template_type: "photo_landscape" };
+    }
+  } else if (category === "industry_tip" && base.has_image) {
+    // 40% photo_tip when an image was already scheduled
+    if (Math.random() > 0.6) {
+      return { has_image: true, image_template_type: "photo_tip" };
+    }
+  } else if (category === "did_you_know" && base.has_image) {
+    // 40% photo_stat when an image was already scheduled
+    if (Math.random() > 0.6) {
+      return { has_image: true, image_template_type: "photo_stat" };
+    }
+  }
+
+  return base;
 }
 
 function isWeekend(date: Date): boolean {
@@ -275,7 +303,7 @@ async function generateImagesForPost(
 export async function POST(request: NextRequest) {
   let batch: { id: string } | null = null;
   try {
-    const { month, year, testMode } = await request.json();
+    const { month, year, testMode, includeImages = true } = await request.json();
 
     if (!month || !year || month < 1 || month > 12) {
       return NextResponse.json(
@@ -372,16 +400,33 @@ export async function POST(request: NextRequest) {
       myth_busting: ["myth_buster", "comparison"],
     };
 
-    // 7. Combine posts with schedule, image assignment, and category
+    // 7. Combine posts with schedule, image assignment, and category.
+    // When includeImages is false, every post is forced text-only and all
+    // image-related columns are nulled out — the assignImageTemplate path
+    // is skipped entirely.
     const postsToInsert = postsToSchedule.map((item, index) => {
       const sched = schedule[index];
-      const image = testMode
+
+      const image = !includeImages
+        ? { has_image: false, image_template_type: null as ImageTemplateType | null }
+        : testMode
         ? {
             has_image: true,
             image_template_type:
               TEST_MODE_TEMPLATES[item.category]?.[item.indexInCategory] || "stat_card",
           }
         : assignImageTemplate(item.category, item.indexInCategory);
+
+      // personal_take posts don't go through the LLM image-fields path, so
+      // when photo_landscape lands on one we copy the post's own copy into
+      // the image fields. Otherwise the photo template would render with
+      // empty text.
+      let imageHeadline = includeImages ? (item.post.image_headline || null) : null;
+      let imageBody = includeImages ? (item.post.image_body || null) : null;
+      if (includeImages && image.image_template_type === "photo_landscape" && item.category === "personal_take") {
+        imageHeadline = item.post.linkedin_personal_content || item.post.linkedin_content;
+        imageBody = "— Speck Hansen, Insero";
+      }
 
       return {
         batch_id: batch!.id,
@@ -398,10 +443,10 @@ export async function POST(request: NextRequest) {
         google_content: item.post.google_content,
         has_image: image.has_image,
         image_template_type: image.image_template_type,
-        image_headline: item.post.image_headline || null,
-        image_body: item.post.image_body || null,
-        image_stat_number: item.post.image_stat_number || null,
-        image_stat_label: item.post.image_stat_label || null,
+        image_headline: imageHeadline,
+        image_body: imageBody,
+        image_stat_number: includeImages ? (item.post.image_stat_number || null) : null,
+        image_stat_label: includeImages ? (item.post.image_stat_label || null) : null,
         status: "draft",
       };
     });
@@ -422,8 +467,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 9. Generate images for posts with has_image: true (non-blocking)
-    if (insertedPosts) {
+    // 9. Generate images for posts with has_image: true (non-blocking).
+    // Skipped entirely when includeImages is false.
+    if (insertedPosts && includeImages) {
       const postsWithImages = insertedPosts.filter((p) => p.has_image);
       const baseUrl = request.nextUrl.origin;
 

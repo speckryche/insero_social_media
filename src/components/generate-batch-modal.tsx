@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Loader2, Plus, Sparkles } from "lucide-react";
 
 const MONTHS = [
@@ -49,6 +50,7 @@ export function GenerateBatchModal() {
   const [month, setMonth] = useState(String(defaultMonth));
   const [year, setYear] = useState(String(defaultYear));
   const [testMode, setTestMode] = useState(false);
+  const [includeImages, setIncludeImages] = useState(true);
   const [loading, setLoading] = useState(false);
   const [progressIndex, setProgressIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +75,7 @@ export function GenerateBatchModal() {
           month: parseInt(month),
           year: parseInt(year),
           testMode,
+          includeImages,
         }),
       });
 
@@ -180,6 +183,24 @@ export function GenerateBatchModal() {
                 <Label htmlFor="testMode" className="text-sm font-normal cursor-pointer">
                   Test mode (8 posts — 1 per template, faster generation)
                 </Label>
+              </div>
+
+              <div className="rounded-lg border p-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="includeImages" className="text-sm font-medium cursor-pointer">
+                    Include images
+                  </Label>
+                  <Switch
+                    id="includeImages"
+                    checked={includeImages}
+                    onCheckedChange={setIncludeImages}
+                  />
+                </div>
+                <p className="text-xs text-gray-500">
+                  {includeImages
+                    ? "Images will be generated for eligible post categories"
+                    : "Posts will be text-only — no images generated"}
+                </p>
               </div>
 
               {error && (

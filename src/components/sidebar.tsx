@@ -49,7 +49,7 @@ export function Sidebar() {
     <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-[#1B2A4A]">
       <div className="flex h-20 items-center px-4">
         <Image
-          src="/Insero Logo (white) - with tagline.png"
+          src="/insero-logo-dark_bg-no-tagline-retina.png"
           alt="Insero"
           width={200}
           height={50}
@@ -80,7 +80,7 @@ export function MobileNav() {
       <SheetContent side="left" className="w-64 p-0 bg-[#1B2A4A] border-none">
         <div className="flex h-20 items-center px-4">
           <Image
-            src="/Insero Logo (white) - with tagline.png"
+            src="/insero-logo-dark_bg-no-tagline-retina.png"
             alt="Insero"
             width={200}
             height={50}

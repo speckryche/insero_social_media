@@ -45,6 +45,25 @@ const SAMPLE_DATA: Record<ImageTemplateType, {
     headline: "5 Signs You're Overpaying for Telecom",
     bodyText: "Review all line items monthly|Cancel unused phone lines|Compare carrier pricing annually|Check contract renewal dates|Ask about bundling discounts",
   },
+  photo_landscape: {
+    headline: "Something I've noticed after 20 years in this industry — most businesses have no idea what their bill actually says.",
+    bodyText: "— Speck Hansen, Insero",
+  },
+  photo_tip: {
+    headline: "Stop paying for phone lines nobody uses",
+    bodyText: "Audit your telecom bills quarterly. Most businesses have 3-5 unused lines they're still paying for, often at full price.",
+    category: "Industry Tip",
+  },
+  photo_stat: {
+    headline: "The average small business overpays by hundreds per month on telecom services they don't fully use",
+    bodyText: "",
+    statNumber: "73%",
+    statLabel: "of SMBs overspend on telecom",
+  },
+  photo_quote: {
+    headline: "We had no idea we were paying for 8 unused phone lines until Insero ran an audit. The savings were immediate.",
+    bodyText: "— Dental practice, 22 employees, Medford OR",
+  },
 };
 
 export async function GET(request: NextRequest) {

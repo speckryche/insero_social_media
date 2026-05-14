@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { publishPost, publishPersonalPost } from "@/lib/publishers";
+import { publishPost } from "@/lib/publishers";
 
 function getSupabase() {
   return createClient(
@@ -108,25 +108,27 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 5. Publish each post
+    // 5. Publish each post via the LinkedIn-only flow.
+    // publishPost now respects per-platform approval flags directly. We
+    // preserve the cron-level `auto_publish_personal` gate by masking the
+    // personal flag to false when the global setting is off — that way
+    // approved personal posts can still surface on the Ready-to-Post page
+    // for manual sharing instead of being auto-published.
     const autoPublishPersonal = settings.auto_publish_personal || false;
     const results = [];
 
     for (const post of postsToPublish) {
-      const result = await publishPost(post);
+      const postForPublish = autoPublishPersonal
+        ? post
+        : { ...post, linkedin_personal_approved: false };
 
-      // If auto_publish_personal is enabled, also publish personal content
-      if (autoPublishPersonal && post.linkedin_personal_content && post.linkedin_personal_approved) {
-        await publishPersonalPost(post);
-      }
+      const result = await publishPost(postForPublish);
 
       results.push({
         postNumber: post.post_number,
         timeSlot: post.time_slot,
-        linkedin: result.linkedin.success,
-        x: result.x.success,
-        facebook: result.facebook.success,
-        google: result.google.success,
+        linkedin: result.linkedin?.success ?? null,
+        linkedin_personal: result.linkedin_personal?.success ?? null,
       });
     }
 

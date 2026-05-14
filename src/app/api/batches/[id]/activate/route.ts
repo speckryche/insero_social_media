@@ -26,9 +26,11 @@ export async function POST(
       return NextResponse.json({ error: "Batch not found" }, { status: 404 });
     }
 
-    if (batch.status !== "approved") {
+    // Activation is allowed from draft or approved. We only block the two
+    // terminal-ish states: already active, or already completed.
+    if (batch.status === "active" || batch.status === "completed") {
       return NextResponse.json(
-        { error: "Batch must be approved before activating" },
+        { error: `Batch is already ${batch.status}` },
         { status: 400 }
       );
     }
@@ -44,6 +46,16 @@ export async function POST(
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Heal any rows where a per-platform approval flag is true but
+    // post.status was left as draft/edited (older approval handler behavior).
+    // Bring them up to "approved" so the next promotion step catches them.
+    await supabase
+      .from("posts")
+      .update({ status: "approved" })
+      .eq("batch_id", params.id)
+      .in("status", ["draft", "edited"])
+      .or("linkedin_personal_approved.eq.true,linkedin_company_approved.eq.true");
 
     // Set all approved posts to scheduled
     await supabase

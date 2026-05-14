@@ -88,6 +88,33 @@ const CATEGORY_LABELS: Record<string, string> = {
   personal_take: "Personal Take",
 };
 
+// Default image template to assign when a user toggles "Include image" on a
+// post that has no image_template_type set (e.g., a text-only batch).
+const DEFAULT_TEMPLATE_BY_CATEGORY: Record<string, string> = {
+  did_you_know: "photo_stat",
+  savings_story: "photo_landscape",
+  industry_tip: "photo_tip",
+  myth_busting: "myth_buster",
+  personal_take: "photo_landscape",
+};
+
+// All 12 templates the user can pick from the per-post template selector.
+// 8 canvas templates followed by 4 photo templates.
+const TEMPLATE_OPTIONS = [
+  "stat_card",
+  "quote_card",
+  "tip_graphic",
+  "comparison",
+  "savings_highlight",
+  "myth_buster",
+  "did_you_know",
+  "checklist",
+  "photo_landscape",
+  "photo_tip",
+  "photo_stat",
+  "photo_quote",
+];
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Post = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -122,10 +149,20 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
   const [previewingPost, setPreviewingPost] = useState<Post | null>(null);
   const [regeneratingImageId, setRegeneratingImageId] = useState<string | null>(null);
   const [togglingImageId, setTogglingImageId] = useState<string | null>(null);
-  const [imageToggleError, setImageToggleError] = useState<{ id: string; message: string } | null>(null);
+  const [autoAddingImageId, setAutoAddingImageId] = useState<string | null>(null);
 
+  // A post counts as "approved" if its overall status is approved/scheduled/
+  // published OR if either per-platform approval flag is true. The flag-true
+  // check covers rows from older clicks of the LinkedIn Personal/Company
+  // approve buttons (which used to only flip the flag and leave status
+  // alone). The Activate route now heals these into status="approved".
   const approvedCount = posts.filter(
-    (p) => p.status === "approved" || p.status === "scheduled" || p.status === "published"
+    (p) =>
+      p.status === "approved" ||
+      p.status === "scheduled" ||
+      p.status === "published" ||
+      p.linkedin_personal_approved === true ||
+      p.linkedin_company_approved === true
   ).length;
   const approvalPercent = Math.round((approvedCount / posts.length) * 100);
 
@@ -170,7 +207,15 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
         method: "POST",
       });
       if (res.ok) {
-        setPosts(posts.map((p) => ({ ...p, linkedin_company_approved: true })));
+        // Mirror the server-side status sync: draft/edited rows get promoted
+        // to approved alongside the flag flip.
+        setPosts(
+          posts.map((p) => ({
+            ...p,
+            linkedin_company_approved: true,
+            status: p.status === "draft" || p.status === "edited" ? "approved" : p.status,
+          }))
+        );
       }
     } finally {
       setLoadingAction(null);
@@ -184,7 +229,13 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
         method: "POST",
       });
       if (res.ok) {
-        setPosts(posts.map((p) => ({ ...p, linkedin_personal_approved: true })));
+        setPosts(
+          posts.map((p) => ({
+            ...p,
+            linkedin_personal_approved: true,
+            status: p.status === "draft" || p.status === "edited" ? "approved" : p.status,
+          }))
+        );
       }
     } finally {
       setLoadingAction(null);
@@ -227,10 +278,21 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
       if (res.ok) {
         const updatedBatch = await res.json();
         setBatch(updatedBatch);
+        // Mirror the server-side activate behavior so local state matches:
+        //   1. Heal: any draft/edited row with at least one approval flag
+        //      gets bumped to "approved" (handles legacy rows where the
+        //      per-platform approve buttons used to flip only the flag).
+        //   2. Promote: any "approved" row becomes "scheduled".
         setPosts(
-          posts.map((p) =>
-            p.status === "approved" ? { ...p, status: "scheduled" } : p
-          )
+          posts.map((p) => {
+            const anyFlag =
+              p.linkedin_personal_approved === true ||
+              p.linkedin_company_approved === true;
+            const isDraftish = p.status === "draft" || p.status === "edited";
+            const healed = isDraftish && anyFlag ? "approved" : p.status;
+            const promoted = healed === "approved" ? "scheduled" : healed;
+            return { ...p, status: promoted };
+          })
         );
       }
     } finally {
@@ -280,52 +342,40 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
     }
   }
 
+  async function handleChangeTemplate(post: Post, newTemplate: string) {
+    if (newTemplate === post.image_template_type) return;
+    setRegeneratingImageId(post.id);
+    try {
+      const patchRes = await fetch(`/api/posts/${post.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image_template_type: newTemplate,
+          status: post.status,
+        }),
+      });
+      if (!patchRes.ok) return;
+
+      const renderRes = await fetch(`/api/posts/${post.id}/regenerate-image`, {
+        method: "POST",
+      });
+      if (renderRes.ok) {
+        const updated = await renderRes.json();
+        setPosts(posts.map((p) => (p.id === post.id ? updated : p)));
+      }
+    } finally {
+      setRegeneratingImageId(null);
+    }
+  }
+
   async function handleToggleImage(post: Post) {
     const turningOn = !post.has_image;
-    setTogglingImageId(post.id);
-    setImageToggleError(null);
 
-    try {
-      if (turningOn) {
-        // Can't generate an image if the post never had image content set up
-        if (!post.image_template_type) {
-          setImageToggleError({
-            id: post.id,
-            message: "This post has no image template. Regenerate the post first to add image content.",
-          });
-          return;
-        }
-
-        // Flip the flag, then render images for all platforms
-        const patchRes = await fetch(`/api/posts/${post.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ has_image: true, status: post.status }),
-        });
-        if (!patchRes.ok) {
-          setImageToggleError({ id: post.id, message: "Failed to update post" });
-          return;
-        }
-
-        const genRes = await fetch(`/api/posts/${post.id}/regenerate-image`, {
-          method: "POST",
-        });
-        if (!genRes.ok) {
-          // Roll back the flag so the UI matches reality
-          await fetch(`/api/posts/${post.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ has_image: false, status: post.status }),
-          });
-          const err = await genRes.json().catch(() => ({}));
-          setImageToggleError({ id: post.id, message: err.error || "Image generation failed" });
-          return;
-        }
-
-        const updated = await genRes.json();
-        setPosts(posts.map((p) => (p.id === post.id ? updated : p)));
-      } else {
-        // Turning OFF: clear has_image and the per-platform URLs
+    // Turning OFF — clear has_image and the per-platform URLs, preserve
+    // image_template_type / image_headline so toggling back ON still works.
+    if (!turningOn) {
+      setTogglingImageId(post.id);
+      try {
         const patchRes = await fetch(`/api/posts/${post.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -343,9 +393,85 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
           const updated = await patchRes.json();
           setPosts(posts.map((p) => (p.id === post.id ? updated : p)));
         }
+      } finally {
+        setTogglingImageId(null);
+      }
+      return;
+    }
+
+    // Turning ON, post already has image_template_type + headline/body — just
+    // flip the flag and render images.
+    if (post.image_template_type) {
+      setTogglingImageId(post.id);
+      try {
+        const patchRes = await fetch(`/api/posts/${post.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ has_image: true, status: post.status }),
+        });
+        if (!patchRes.ok) return;
+
+        const genRes = await fetch(`/api/posts/${post.id}/regenerate-image`, {
+          method: "POST",
+        });
+        if (!genRes.ok) {
+          await fetch(`/api/posts/${post.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ has_image: false, status: post.status }),
+          });
+          return;
+        }
+        const updated = await genRes.json();
+        setPosts(posts.map((p) => (p.id === post.id ? updated : p)));
+      } finally {
+        setTogglingImageId(null);
+      }
+      return;
+    }
+
+    // Auto-add flow: turning ON a text-only post with no template. Pick a
+    // default template by category, persist it, regenerate the post so the
+    // LLM produces image_headline/image_body (the regenerate route includes
+    // image fields when has_image is true), then render the image.
+    setAutoAddingImageId(post.id);
+    try {
+      const defaultTemplate =
+        DEFAULT_TEMPLATE_BY_CATEGORY[post.content_category as string] ?? "stat_card";
+
+      const patchRes = await fetch(`/api/posts/${post.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          has_image: true,
+          image_template_type: defaultTemplate,
+          status: post.status,
+        }),
+      });
+      if (!patchRes.ok) return;
+
+      const regenRes = await fetch(`/api/posts/${post.id}/regenerate`, {
+        method: "POST",
+      });
+      if (!regenRes.ok) {
+        // Roll back the flag if regeneration fails so the toggle reflects reality
+        await fetch(`/api/posts/${post.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ has_image: false, status: post.status }),
+        });
+        return;
+      }
+
+      const renderRes = await fetch(`/api/posts/${post.id}/regenerate-image`, {
+        method: "POST",
+      });
+      if (renderRes.ok) {
+        const updated = await renderRes.json();
+        setPosts(posts.map((p) => (p.id === post.id ? updated : p)));
       }
     } finally {
-      setTogglingImageId(null);
+      setAutoAddingImageId(null);
     }
   }
 
@@ -567,7 +693,12 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
             </>
           )}
 
-          {batch.status === "approved" && (
+          {/* Activate Batch — visible while the batch is still actionable
+              (draft or approved) and at least one post has been approved.
+              Activation promotes approved posts to "scheduled" and lets the
+              cron picker pick them up. */}
+          {(batch.status === "draft" || batch.status === "approved") &&
+            approvedCount > 0 && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button
@@ -589,7 +720,9 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                   <AlertDialogDescription>
                     This will begin automatic posting to all platforms (LinkedIn,
                     X, Facebook, Google Business Profile) according to the
-                    schedule. Personal profile posts will appear in Ready to Post.
+                    schedule. Only posts already marked Approved will be
+                    scheduled — drafts stay out of the queue. Personal profile
+                    posts will appear in Ready to Post.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -769,7 +902,7 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                     {CATEGORY_LABELS[post.content_category] || post.content_category}
                   </Badge>
                   {/* Image status indicator — quick visual scan */}
-                  {togglingImageId === post.id ? (
+                  {togglingImageId === post.id || autoAddingImageId === post.id ? (
                     <span title="Image generation in progress" className="inline-flex items-center">
                       <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                     </span>
@@ -858,13 +991,18 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                 <Switch
                   checked={post.has_image}
                   onCheckedChange={() => handleToggleImage(post)}
-                  disabled={togglingImageId === post.id}
+                  disabled={togglingImageId === post.id || autoAddingImageId === post.id}
                   aria-label="Include image for this post"
                 />
                 <span className="text-xs font-medium text-gray-700">Include image</span>
-                {togglingImageId === post.id && (
+                {autoAddingImageId === post.id ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-blue-600">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Adding image…
+                  </span>
+                ) : togglingImageId === post.id ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
-                )}
+                ) : null}
                 {post.has_image && post.linkedin_image_url && (
                   <>
                     <img
@@ -872,6 +1010,22 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                       alt="Post image"
                       className="h-16 w-auto rounded border ml-auto"
                     />
+                    <Select
+                      value={post.image_template_type || undefined}
+                      onValueChange={(v) => handleChangeTemplate(post, v)}
+                      disabled={regeneratingImageId === post.id}
+                    >
+                      <SelectTrigger className="h-8 w-[170px] text-xs">
+                        <SelectValue placeholder="Template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TEMPLATE_OPTIONS.map((t) => (
+                          <SelectItem key={t} value={t} className="text-xs">
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button
                       variant="outline"
                       size="sm"
@@ -889,12 +1043,6 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                   </>
                 )}
               </div>
-              {imageToggleError && imageToggleError.id === post.id && (
-                <div className="mb-3 flex items-start gap-2 p-2 bg-amber-50 rounded text-xs text-amber-800">
-                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  <span>{imageToggleError.message}</span>
-                </div>
-              )}
 
               {/* Other platform tabs */}
               <Tabs defaultValue="x" className="w-full">
@@ -1022,8 +1170,17 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                 )}
 
                 <div className="ml-auto flex items-center gap-2">
-                  {/* Publish Now button for approved/scheduled posts */}
-                  {(post.status === "approved" || post.status === "scheduled") && (
+                  {/* Publish Now — visible for approved/scheduled posts, plus
+                      a safety-net case for posts that have an approval flag
+                      set while the batch is active (covers any local-state
+                      drift). Hidden once a post is published. */}
+                  {post.status !== "published" &&
+                    post.status !== "failed" &&
+                    (post.status === "approved" ||
+                      post.status === "scheduled" ||
+                      (batch.status === "active" &&
+                        (post.linkedin_personal_approved === true ||
+                          post.linkedin_company_approved === true))) && (
                     <Button
                       variant="outline"
                       size="sm"

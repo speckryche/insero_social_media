@@ -26,10 +26,12 @@ export async function POST(
     }
 
     if (type === "personal") {
-      // Toggle linkedin_personal_approved
+      // Toggle linkedin_personal_approved AND keep post.status in sync with
+      // the per-platform flags so the approval counter and Activate gate
+      // reflect this approval.
       const { data: post } = await supabase
         .from("posts")
-        .select("linkedin_personal_approved")
+        .select("linkedin_personal_approved, linkedin_company_approved, status")
         .eq("id", params.id)
         .single();
 
@@ -37,9 +39,23 @@ export async function POST(
         return NextResponse.json({ error: "Post not found" }, { status: 404 });
       }
 
+      const newPersonal = !post.linkedin_personal_approved;
+      const anyApproved = newPersonal || post.linkedin_company_approved;
+      // Don't demote terminal states; otherwise the post's status follows
+      // whether at least one platform flag is true.
+      const isTerminal = post.status === "scheduled" || post.status === "published";
+      const newStatus = isTerminal
+        ? post.status
+        : anyApproved
+        ? "approved"
+        : "draft";
+
       const { data, error } = await supabase
         .from("posts")
-        .update({ linkedin_personal_approved: !post.linkedin_personal_approved })
+        .update({
+          linkedin_personal_approved: newPersonal,
+          status: newStatus,
+        })
         .eq("id", params.id)
         .select()
         .single();
@@ -51,10 +67,10 @@ export async function POST(
     }
 
     if (type === "company") {
-      // Toggle linkedin_company_approved
+      // Toggle linkedin_company_approved AND keep post.status in sync.
       const { data: post } = await supabase
         .from("posts")
-        .select("linkedin_company_approved")
+        .select("linkedin_personal_approved, linkedin_company_approved, status")
         .eq("id", params.id)
         .single();
 
@@ -62,9 +78,21 @@ export async function POST(
         return NextResponse.json({ error: "Post not found" }, { status: 404 });
       }
 
+      const newCompany = !post.linkedin_company_approved;
+      const anyApproved = post.linkedin_personal_approved || newCompany;
+      const isTerminal = post.status === "scheduled" || post.status === "published";
+      const newStatus = isTerminal
+        ? post.status
+        : anyApproved
+        ? "approved"
+        : "draft";
+
       const { data, error } = await supabase
         .from("posts")
-        .update({ linkedin_company_approved: !post.linkedin_company_approved })
+        .update({
+          linkedin_company_approved: newCompany,
+          status: newStatus,
+        })
         .eq("id", params.id)
         .select()
         .single();

@@ -9,10 +9,11 @@ function getSupabase() {
 }
 
 function getLinkedInVersion(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${year}${month}`;
+  // Pinned to a known-stable LinkedIn API version. The dynamic
+  // current-month value LinkedIn used to advertise (YYYYMM) now returns
+  // NONEXISTENT_VERSION for unreleased months — re-pin manually when
+  // LinkedIn promotes a newer stable release.
+  return "202411";
 }
 
 async function getAccessToken(): Promise<string> {
@@ -223,6 +224,72 @@ async function uploadLinkedInImage(
   }
 }
 
+// Legacy fallback for image upload. /rest/images?action=initializeUpload
+// (used by uploadLinkedInImage above) requires the Marketing Developer
+// Platform product and returns 403 for plain w_member_social tokens. The
+// v2/assets registerUpload flow predates that gate and works with member-
+// context tokens. Returns the digitalmediaAsset URN, or null on any failure.
+async function uploadLinkedInImageLegacy(
+  accessToken: string,
+  ownerUrn: string,
+  imageUrl: string
+): Promise<string | null> {
+  try {
+    // Step 1 — register the upload
+    const registerRes = await fetch(
+      "https://api.linkedin.com/v2/assets?action=registerUpload",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+        body: JSON.stringify({
+          registerUploadRequest: {
+            recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
+            owner: ownerUrn,
+            serviceRelationships: [
+              {
+                relationshipType: "OWNER",
+                identifier: "urn:li:userGeneratedContent",
+              },
+            ],
+          },
+        }),
+      }
+    );
+
+    if (!registerRes.ok) return null;
+
+    const registerData = await registerRes.json();
+    const uploadUrl =
+      registerData?.value?.uploadMechanism?.[
+        "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
+      ]?.uploadUrl;
+    const assetUrn: string | undefined = registerData?.value?.asset;
+    if (!uploadUrl || !assetUrn) return null;
+
+    // Step 2 — fetch the image bytes from the public URL
+    const imageRes = await fetch(imageUrl);
+    if (!imageRes.ok) return null;
+    const imageBuffer = await imageRes.arrayBuffer();
+
+    // Step 3 — PUT the bytes to LinkedIn's upload URL
+    const uploadRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: imageBuffer,
+    });
+
+    if (!uploadRes.ok) return null;
+
+    return assetUrn;
+  } catch {
+    return null;
+  }
+}
+
 export async function publishAsPersonal(
   content: string,
   imageUrl?: string
@@ -230,47 +297,67 @@ export async function publishAsPersonal(
   try {
     const accessToken = await getAccessToken();
     const personUrn = `urn:li:person:${process.env.LINKEDIN_PERSON_URN}`;
-    const version = getLinkedInVersion();
 
+    // Use the legacy /v2/ugcPosts endpoint instead of /rest/posts. /rest/posts
+    // requires Community Management API approval; ugcPosts only needs the
+    // w_member_social scope.
     const headers: Record<string, string> = {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
       "X-Restli-Protocol-Version": "2.0.0",
-      "LinkedIn-Version": version,
+      "LinkedIn-Version": "202210",
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const body: any = {
-      author: personUrn,
-      commentary: content,
-      visibility: "PUBLIC",
-      distribution: {
-        feedDistribution: "MAIN_FEED",
-        targetEntities: [],
-        thirdPartyDistributionChannels: [],
-      },
-      lifecycleState: "PUBLISHED",
-      isReshareDisabledByAuthor: false,
-    };
-
+    // Optional image upload. Try the modern /rest/images path first; it
+    // typically 403s on member-context tokens, in which case fall back to
+    // the legacy /v2/assets registerUpload flow which works with
+    // w_member_social. If both fail (for any reason), drop the image and
+    // publish text-only — we never block publishing on the image.
+    let imageUrn: string | null = null;
     if (imageUrl) {
-      const imageUrn = await uploadLinkedInImage(
+      imageUrn = await uploadLinkedInImage(
         accessToken,
         personUrn,
         imageUrl,
-        version
+        "202210"
       );
-      if (imageUrn) {
-        body.content = {
-          media: {
-            altText: "Insero Social Hub post image",
-            id: imageUrn,
-          },
-        };
+      if (!imageUrn) {
+        imageUrn = await uploadLinkedInImageLegacy(
+          accessToken,
+          personUrn,
+          imageUrl
+        );
       }
     }
 
-    const res = await fetch("https://api.linkedin.com/rest/posts", {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shareContent: any = {
+      shareCommentary: { text: content },
+      shareMediaCategory: imageUrn ? "IMAGE" : "NONE",
+    };
+    if (imageUrn) {
+      shareContent.media = [
+        {
+          status: "READY",
+          description: { text: "" },
+          media: imageUrn,
+          title: { text: "Image" },
+        },
+      ];
+    }
+
+    const body = {
+      author: personUrn,
+      lifecycleState: "PUBLISHED",
+      specificContent: {
+        "com.linkedin.ugc.ShareContent": shareContent,
+      },
+      visibility: {
+        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC",
+      },
+    };
+
+    const res = await fetch("https://api.linkedin.com/v2/ugcPosts", {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -278,9 +365,13 @@ export async function publishAsPersonal(
 
     if (!res.ok) {
       const errorText = await res.text();
-      return { success: false, error: `LinkedIn Personal API error (${res.status}): ${errorText}` };
+      return {
+        success: false,
+        error: `LinkedIn Personal API error (${res.status}): ${errorText}`,
+      };
     }
 
+    // ugcPosts returns the new post URN in x-restli-id (and also in the JSON body's `id`).
     const postId = res.headers.get("x-restli-id") || undefined;
     return { success: true, postId };
   } catch (error) {

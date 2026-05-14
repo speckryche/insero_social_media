@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { retryFailedPlatforms } from "@/lib/publishers";
+import { publishPost } from "@/lib/publishers";
 
 function getSupabase() {
   return createClient(
@@ -34,7 +34,7 @@ export async function POST(
       );
     }
 
-    const result = await retryFailedPlatforms(post);
+    const result = await publishPost(post);
 
     // Re-fetch the updated post
     const { data: updated } = await supabase

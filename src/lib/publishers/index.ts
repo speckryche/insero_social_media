@@ -29,6 +29,7 @@ interface PostData {
   linkedin_personal_image_url?: string | null;
   has_image: boolean;
   linkedin_personal_approved?: boolean;
+  linkedin_company_approved?: boolean;
 }
 
 interface PublishAllResult {
@@ -36,6 +37,15 @@ interface PublishAllResult {
   x: PublishResult;
   facebook: PublishResult;
   google: PublishResult;
+}
+
+// Return shape for the LinkedIn-only publishPost flow. Keys are present only
+// for variants that were actually attempted (gated by the per-platform
+// approval flags). X / Facebook / Google are skipped entirely for now until
+// their credentials are configured.
+export interface PublishPostResult {
+  linkedin?: PublishResult;
+  linkedin_personal?: PublishResult;
 }
 
 type Platform = "linkedin" | "x" | "facebook" | "google";
@@ -55,64 +65,120 @@ async function logResult(
   });
 }
 
-export async function publishPost(post: PostData): Promise<PublishAllResult> {
+export async function publishPost(post: PostData): Promise<PublishPostResult> {
   const supabase = getSupabase();
 
-  // Use platform-specific image URLs when available
-  const linkedinImage = post.has_image && post.linkedin_image_url ? post.linkedin_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
-  const xImage = post.has_image && post.x_image_url ? post.x_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
-  const facebookImage = post.has_image && post.facebook_image_url ? post.facebook_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
-  const googleImage = post.has_image && post.google_image_url ? post.google_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
+  const wantsCompany = post.linkedin_company_approved === true;
+  const wantsPersonal =
+    post.linkedin_personal_approved === true &&
+    !!post.linkedin_personal_content;
 
-  // Run all four publishers in parallel — failures are isolated
-  const [linkedinResult, xResult, facebookResult, googleResult] =
-    await Promise.all([
-      linkedin.publish(post.linkedin_content, linkedinImage),
-      x.publish(post.x_content, xImage),
-      facebook.publish(post.facebook_content, facebookImage),
-      googleBusiness.publish(post.google_content, googleImage),
-    ]);
+  // Nothing approved — leave the post row untouched and let the caller handle.
+  if (!wantsCompany && !wantsPersonal) {
+    return {};
+  }
 
-  // Log each result
-  await Promise.all([
-    logResult(post.id, "linkedin", linkedinResult),
-    logResult(post.id, "x", xResult),
-    logResult(post.id, "facebook", facebookResult),
-    logResult(post.id, "google", googleResult),
+  // Per-platform image URLs with a fallback to the legacy image_url column.
+  const companyImage = post.has_image
+    ? post.linkedin_image_url || post.image_url || undefined
+    : undefined;
+  const personalImage = post.has_image
+    ? post.linkedin_personal_image_url || undefined
+    : undefined;
+
+  // Log what's firing so the dev server output makes it obvious which
+  // variants are being attempted and which are being skipped.
+  console.log(
+    `[publishPost] post=${post.id} wantsCompany=${wantsCompany} wantsPersonal=${wantsPersonal}`
+  );
+
+  // Run the two LinkedIn variants in parallel — failures are isolated. X,
+  // Facebook, and Google publishers are not called at all in this build.
+  const [companyResult, personalResult] = await Promise.all([
+    wantsCompany
+      ? linkedin.publish(post.linkedin_content, companyImage)
+      : Promise.resolve<PublishResult | undefined>(undefined),
+    wantsPersonal
+      ? linkedin.publishAsPersonal(post.linkedin_personal_content!, personalImage)
+      : Promise.resolve<PublishResult | undefined>(undefined),
   ]);
 
-  // Build error log from any failures
+  if (companyResult) {
+    console.log(
+      `[publishPost] company result: success=${companyResult.success}` +
+      (companyResult.error ? ` error="${companyResult.error.slice(0, 200)}"` : "") +
+      (companyResult.postId ? ` postId=${companyResult.postId}` : "")
+    );
+  }
+  if (personalResult) {
+    console.log(
+      `[publishPost] personal result: success=${personalResult.success}` +
+      (personalResult.error ? ` error="${personalResult.error.slice(0, 200)}"` : "") +
+      (personalResult.postId ? ` postId=${personalResult.postId}` : "")
+    );
+  }
+
+  // Log to publish_logs. The CHECK on publish_logs.platform only allows the
+  // four legacy platforms, so the personal variant is folded into "linkedin"
+  // here (consistent with how publishPersonalPost behaves: it doesn't write
+  // a separate log row).
+  if (companyResult) {
+    await logResult(post.id, "linkedin", companyResult);
+  }
+
+  // Distinguish "expected" company failures from real ones. Until we have
+  // the Marketing Developer Platform (`w_organization_social`) product on
+  // the LinkedIn app, posting to the org URN with a member-context token
+  // returns 403 — that's a known limitation, not a publish failure. So we
+  // only treat the company result as a blocking failure if it failed with a
+  // non-403 status, OR if no personal call was attempted to fall back on.
+  const companyFailed = !!(companyResult && !companyResult.success);
+  const companyIs403 =
+    companyFailed && /\b(?:403|ACCESS_DENIED|Not enough permissions)\b/.test(companyResult!.error || "");
+  const personalFailed = !!(personalResult && !personalResult.success);
+
+  // Blocking failure = anything that should mark the post as failed.
+  const companyBlocking = companyFailed && !(companyIs403 && wantsPersonal);
+  const blocking = companyBlocking || personalFailed;
+
+  // Error log still records every failure verbatim so it's visible in the
+  // batch review UI's red "failed" panel — even the expected 403s.
   const errors: string[] = [];
-  if (!linkedinResult.success) errors.push(`LinkedIn: ${linkedinResult.error}`);
-  if (!xResult.success) errors.push(`X: ${xResult.error}`);
-  if (!facebookResult.success) errors.push(`Facebook: ${facebookResult.error}`);
-  if (!googleResult.success) errors.push(`Google: ${googleResult.error}`);
+  if (companyResult && !companyResult.success) {
+    errors.push(`LinkedIn company: ${companyResult.error}`);
+  }
+  if (personalResult && !personalResult.success) {
+    errors.push(`LinkedIn personal: ${personalResult.error}`);
+  }
 
-  const allSucceeded = errors.length === 0;
+  if (companyIs403 && wantsPersonal) {
+    console.log(
+      "[publishPost] company 403 treated as expected/skipped — personal path decides post status"
+    );
+  }
 
-  // Update the post record in Supabase
-  await supabase
-    .from("posts")
-    .update({
-      linkedin_published: linkedinResult.success,
-      x_published: xResult.success,
-      facebook_published: facebookResult.success,
-      google_published: googleResult.success,
-      linkedin_post_id: linkedinResult.postId || null,
-      x_post_id: xResult.postId || null,
-      facebook_post_id: facebookResult.postId || null,
-      google_post_id: googleResult.postId || null,
-      status: allSucceeded ? "published" : "failed",
-      published_at: allSucceeded ? new Date().toISOString() : null,
-      error_log: errors.length > 0 ? errors.join("\n") : null,
-    })
-    .eq("id", post.id);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const update: any = {
+    status: blocking ? "failed" : "published",
+    error_log: errors.length > 0 ? errors.join("\n") : null,
+  };
+  if (!blocking) {
+    update.published_at = new Date().toISOString();
+  }
+  if (companyResult) {
+    update.linkedin_published = companyResult.success;
+    update.linkedin_post_id = companyResult.postId || null;
+  }
+  if (personalResult) {
+    update.linkedin_personal_published = personalResult.success;
+    update.linkedin_personal_post_id = personalResult.postId || null;
+  }
+
+  await supabase.from("posts").update(update).eq("id", post.id);
 
   return {
-    linkedin: linkedinResult,
-    x: xResult,
-    facebook: facebookResult,
-    google: googleResult,
+    linkedin: companyResult,
+    linkedin_personal: personalResult,
   };
 }
 

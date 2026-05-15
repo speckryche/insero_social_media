@@ -64,6 +64,16 @@ const SAMPLE_DATA: Record<ImageTemplateType, {
     headline: "We had no idea we were paying for 8 unused phone lines until Insero ran an audit. The savings were immediate.",
     bodyText: "— Dental practice, 22 employees, Medford OR",
   },
+  photo_overlay_right: {
+    headline: "Stop paying for phone lines nobody uses",
+    bodyText: "Most businesses have 3-5 unused lines they're still paying full price for. A quarterly audit catches it.",
+    category: "Industry Tip",
+  },
+  photo_overlay_left: {
+    headline: "Stop paying for phone lines nobody uses",
+    bodyText: "Most businesses have 3-5 unused lines they're still paying full price for. A quarterly audit catches it.",
+    category: "Industry Tip",
+  },
 };
 
 export async function GET(request: NextRequest) {

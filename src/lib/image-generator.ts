@@ -51,7 +51,9 @@ export type ImageTemplateType =
   | "photo_landscape"
   | "photo_tip"
   | "photo_stat"
-  | "photo_quote";
+  | "photo_quote"
+  | "photo_overlay_right"
+  | "photo_overlay_left";
 
 interface ImageOptions {
   templateType: ImageTemplateType;
@@ -107,6 +109,66 @@ const PHOTO_BAND_COLORS: Partial<Record<ImageTemplateType, string>> = {
 // muted so the brand band stays the focal point.
 const GRAYSCALE_TEMPLATES: ImageTemplateType[] = ["photo_tip", "photo_stat"];
 
+// Photo overlay templates: full-bleed Pexels photo with a one-side gradient
+// of #005C28 fading to transparent, brand content on the solid side, logo in
+// the matching corner. Different background flow than the split-band photo
+// templates, so they're routed separately in generatePostImage.
+const OVERLAY_TEMPLATES: ImageTemplateType[] = [
+  "photo_overlay_right",
+  "photo_overlay_left",
+];
+
+// Overlay templates use 100% person-focused queries that strongly suggest a
+// phone or computer context — those tend to come back framed with the
+// subject to one side of the frame, holding a device, which sits well next
+// to the inset photo's rounded edge.
+const OVERLAY_PERSON_QUERIES = [
+  "business professional talking on phone office",
+  "woman on phone office desk",
+  "man laptop computer office working",
+  "business person phone call smiling office",
+  "professional woman computer desk office",
+  "executive talking phone business office",
+  "business man laptop working office desk",
+];
+
+function getOverlayPhotoQuery(): string {
+  return OVERLAY_PERSON_QUERIES[
+    Math.floor(Math.random() * OVERLAY_PERSON_QUERIES.length)
+  ];
+}
+
+// Background-removal helper. POSTs an image URL to Remove.bg's removebg
+// endpoint and returns a PNG buffer containing the subject on a transparent
+// background. Returns null on any failure (missing key, rate limit, network
+// error, non-200) so the caller can fall back to a non-cutout flow.
+async function removeBackground(imageUrl: string): Promise<Buffer | null> {
+  const apiKey = process.env.REMOVEBG_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const form = new FormData();
+    form.append("image_url", imageUrl);
+    form.append("size", "auto");
+
+    const response = await fetch("https://api.remove.bg/v1.0/removebg", {
+      method: "POST",
+      headers: { "X-Api-Key": apiKey },
+      body: form,
+    });
+
+    if (!response.ok) {
+      console.warn(`[removeBackground] Remove.bg returned ${response.status}`);
+      return null;
+    }
+
+    return Buffer.from(await response.arrayBuffer());
+  } catch (err) {
+    console.warn("[removeBackground] failed:", err);
+    return null;
+  }
+}
+
 const PHOTO_ZONE_HEIGHT = 520;
 
 // Brand logo overlay. The two source files in /public are retina (2x) PNGs
@@ -128,9 +190,13 @@ const DARK_BG_TEMPLATES: ImageTemplateType[] = [
   "photo_landscape",
   "photo_stat",
   "photo_quote",
+  // Overlay templates: both use a dark forest green gradient zone, so the
+  // white-on-dark logo applies to both.
+  "photo_overlay_right",
+  "photo_overlay_left",
 ];
 
-const LOGO_HEIGHT = 32; // displayed px; brand guideline calls for 28-32px
+const LOGO_HEIGHT = 28; // displayed px; brand guideline calls for 28-32px
 const LOGO_PADDING = 24; // px from the canvas edge
 
 let fontsRegistered = false;
@@ -291,6 +357,250 @@ async function paintPhotoBackground(
   // Brand color band fills the rest of the canvas
   ctx.fillStyle = bandColor;
   ctx.fillRect(0, photoH + 4, width, height - photoH - 4);
+}
+
+// Full-bleed photo for overlay templates. Fetches from Pexels, cover-crops
+// to fill the entire canvas (no top/bottom split), falls back to solid dark
+// forest green if the fetch fails for any reason.
+async function paintFullBleedPhoto(
+  ctx: SKRSContext2D,
+  query: string,
+  width: number,
+  height: number
+): Promise<boolean> {
+  const photoUrl = query ? await fetchPexelsPhoto(query) : null;
+  if (photoUrl) {
+    try {
+      const res = await fetch(photoUrl);
+      if (res.ok) {
+        const buf = Buffer.from(await res.arrayBuffer());
+        const img = await loadImage(buf);
+        const scale = Math.max(width / img.width, height / img.height);
+        const scaledW = img.width * scale;
+        const scaledH = img.height * scale;
+        const offsetX = (width - scaledW) / 2;
+        const offsetY = (height - scaledH) / 2;
+        ctx.drawImage(img, offsetX, offsetY, scaledW, scaledH);
+        return true;
+      }
+    } catch {
+      // fall through to fallback
+    }
+  }
+  ctx.fillStyle = "#003d18";
+  ctx.fillRect(0, 0, width, height);
+  return false;
+}
+
+// Linear gradient from the photoSide's opposite edge inward, fading from
+// solid #005C28 to fully transparent. photoSide = "right" means the photo
+// is on the right of the canvas; gradient fills from left edge inward.
+function drawOverlayGradient(
+  ctx: SKRSContext2D,
+  photoSide: "right" | "left",
+  width: number,
+  height: number
+) {
+  const gradient =
+    photoSide === "right"
+      ? ctx.createLinearGradient(0, 0, width, 0)
+      : ctx.createLinearGradient(width, 0, 0, 0);
+  gradient.addColorStop(0, "rgba(0, 92, 40, 1)");
+  gradient.addColorStop(0.4, "rgba(0, 92, 40, 1)");
+  gradient.addColorStop(0.58, "rgba(0, 92, 40, 0.85)");
+  gradient.addColorStop(0.7, "rgba(0, 92, 40, 0.35)");
+  gradient.addColorStop(0.82, "rgba(0, 92, 40, 0.08)");
+  gradient.addColorStop(1.0, "rgba(0, 92, 40, 0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+}
+
+// Cover-cropped photo from an already-known URL. Lets the cutout flow
+// reuse the Pexels URL it already fetched, avoiding a second Pexels call.
+async function drawCoverPhotoFromUrl(
+  ctx: SKRSContext2D,
+  photoUrl: string,
+  width: number,
+  height: number
+): Promise<boolean> {
+  try {
+    const res = await fetch(photoUrl);
+    if (!res.ok) return false;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const img = await loadImage(buf);
+    const scale = Math.max(width / img.width, height / img.height);
+    const scaledW = img.width * scale;
+    const scaledH = img.height * scale;
+    ctx.drawImage(
+      img,
+      (width - scaledW) / 2,
+      (height - scaledH) / 2,
+      scaledW,
+      scaledH
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Draws a Pexels photo inside an inset rectangle, cover-cropped, with only
+// the inner-edge corners rounded. Used by the overlay templates where the
+// photo sits on top of a full-canvas green panel with the inset rect's
+// rounded edge facing the text column.
+async function drawPhotoClipped(
+  ctx: SKRSContext2D,
+  photoUrl: string,
+  rect: { x: number; y: number; w: number; h: number },
+  roundedSide: "left" | "right",
+  radius: number
+): Promise<boolean> {
+  try {
+    const res = await fetch(photoUrl);
+    if (!res.ok) return false;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const img = await loadImage(buf);
+
+    ctx.save();
+    ctx.beginPath();
+    if (roundedSide === "left") {
+      // Top-left + bottom-left rounded, top-right + bottom-right sharp
+      ctx.moveTo(rect.x + radius, rect.y);
+      ctx.lineTo(rect.x + rect.w, rect.y);
+      ctx.lineTo(rect.x + rect.w, rect.y + rect.h);
+      ctx.lineTo(rect.x + radius, rect.y + rect.h);
+      ctx.arcTo(rect.x, rect.y + rect.h, rect.x, rect.y + rect.h - radius, radius);
+      ctx.lineTo(rect.x, rect.y + radius);
+      ctx.arcTo(rect.x, rect.y, rect.x + radius, rect.y, radius);
+    } else {
+      // Top-right + bottom-right rounded, top-left + bottom-left sharp
+      ctx.moveTo(rect.x, rect.y);
+      ctx.lineTo(rect.x + rect.w - radius, rect.y);
+      ctx.arcTo(rect.x + rect.w, rect.y, rect.x + rect.w, rect.y + radius, radius);
+      ctx.lineTo(rect.x + rect.w, rect.y + rect.h - radius);
+      ctx.arcTo(rect.x + rect.w, rect.y + rect.h, rect.x + rect.w - radius, rect.y + rect.h, radius);
+      ctx.lineTo(rect.x, rect.y + rect.h);
+    }
+    ctx.closePath();
+    ctx.clip();
+
+    // Cover-crop the photo inside the clipped rect
+    const scale = Math.max(rect.w / img.width, rect.h / img.height);
+    const scaledW = img.width * scale;
+    const scaledH = img.height * scale;
+    const offsetX = rect.x + (rect.w - scaledW) / 2;
+    const offsetY = rect.y + (rect.h - scaledH) / 2;
+    ctx.drawImage(img, offsetX, offsetY, scaledW, scaledH);
+
+    ctx.restore();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Solid brand-green panel that covers one half of the canvas, with only the
+// inner-edge corners rounded. The opposite edge sits flush against the
+// canvas edge (no rounding there). Used by the photo-overlay templates as
+// the background for the text column.
+function drawPanel(
+  ctx: SKRSContext2D,
+  panelSide: "left" | "right",
+  canvasW: number,
+  canvasH: number
+) {
+  const panelW = 560;
+  const radius = 40;
+  ctx.fillStyle = "#005C28";
+  ctx.beginPath();
+  if (panelSide === "left") {
+    // Panel pinned to canvas left edge; round the right-side corners only.
+    ctx.moveTo(0, 0);
+    ctx.lineTo(panelW - radius, 0);
+    ctx.arcTo(panelW, 0, panelW, radius, radius);
+    ctx.lineTo(panelW, canvasH - radius);
+    ctx.arcTo(panelW, canvasH, panelW - radius, canvasH, radius);
+    ctx.lineTo(0, canvasH);
+  } else {
+    // Panel pinned to canvas right edge; round the left-side corners only.
+    const left = canvasW - panelW;
+    const right = canvasW;
+    ctx.moveTo(right, 0);
+    ctx.lineTo(left + radius, 0);
+    ctx.arcTo(left, 0, left, radius, radius);
+    ctx.lineTo(left, canvasH - radius);
+    ctx.arcTo(left, canvasH, left + radius, canvasH, radius);
+    ctx.lineTo(right, canvasH);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Subtle dark vignette for the cutout flow. Sits on the same side as the
+// subject; gives the subject a soft shadow zone to land on so they don't
+// look pasted flat onto solid color.
+function drawDepthGradient(
+  ctx: SKRSContext2D,
+  subjectSide: "right" | "left",
+  width: number,
+  height: number
+) {
+  const gradient =
+    subjectSide === "right"
+      ? ctx.createLinearGradient(0, 0, width, 0)
+      : ctx.createLinearGradient(width, 0, 0, 0);
+  gradient.addColorStop(0, "rgba(0, 20, 8, 0)");
+  gradient.addColorStop(0.55, "rgba(0, 20, 8, 0)");
+  gradient.addColorStop(0.75, "rgba(0, 20, 8, 0.3)");
+  gradient.addColorStop(1.0, "rgba(0, 20, 8, 0.5)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+}
+
+// Composites a Remove.bg cutout (transparent PNG) onto the canvas.
+// The subject is scaled to a fixed width of 660px (bleeding 120px past the
+// canvas centerline at 540 → 660) and anchored to one side. Vertical
+// position is centered; if scaledH exceeds the canvas, parts get clipped
+// naturally by canvas bounds.
+function drawCutoutSubject(
+  ctx: SKRSContext2D,
+  subjectImg: import("@napi-rs/canvas").Image,
+  subjectSide: "right" | "left",
+  canvasW: number,
+  canvasH: number
+) {
+  const targetWidth = 660;
+  const scale = targetWidth / subjectImg.width;
+  const scaledW = targetWidth;
+  const scaledH = subjectImg.height * scale;
+  const x = subjectSide === "left" ? 0 : canvasW - scaledW;
+  const y = (canvasH - scaledH) / 2;
+  ctx.drawImage(subjectImg, x, y, scaledW, scaledH);
+}
+
+// Logo placement for overlay templates — sits in the corner on the same
+// side as the content (opposite the photo). 48px from the canvas edge on
+// both axes. Logo is sized larger here than on other templates to balance
+// the heavier overlay content. Silently skips if the logo file can't load.
+async function drawOverlayLogo(
+  ctx: SKRSContext2D,
+  logoSide: "left" | "right",
+  width: number,
+  height: number
+) {
+  try {
+    const logoPath = path.join(process.cwd(), "public", LOGO_FILES.dark);
+    const logoData = readFileSync(logoPath);
+    const logo = await loadImage(logoData);
+    const displayHeight = 54;
+    const displayWidth = (logo.width / logo.height) * displayHeight;
+    // Logo bottom pinned 60px from the canvas bottom (y=1020 on 1080-tall).
+    const y = height - 60 - displayHeight;
+    const x = logoSide === "left" ? 48 : width - 48 - displayWidth;
+    ctx.drawImage(logo, x, y, displayWidth, displayHeight);
+  } catch {
+    // logo not available — render without it rather than fail the post
+  }
 }
 
 async function drawLogo(
@@ -793,6 +1103,110 @@ function renderPhotoQuote(ctx: SKRSContext2D, opts: ImageOptions) {
   ctx.fillRect(pad, 1020, 200, 3);
 }
 
+// Shared text-rendering routine for the two photo-overlay templates. The
+// 440px content zone is anchored to contentX on the left. The accent bar
+// is gone — pill sits high, headline becomes the dominant hero element at
+// 68px, body text follows. Designed to fill the green panel confidently.
+function renderOverlayContent(
+  ctx: SKRSContext2D,
+  opts: ImageOptions,
+  contentX: number
+) {
+  const { headline, bodyText, category } = opts;
+  const textW = 440;
+
+  // Belt-and-braces: explicitly left-align so font defaults can't push the
+  // pill text or headline letters off the shared contentX baseline.
+  ctx.textAlign = "left";
+
+  // ---- Dynamic vertical distribution ----
+  // The text block lives between y=80 (pill top) and y=940 (above the logo
+  // zone). We measure each block at its real font, then spread any leftover
+  // space as gaps weighted 35/65 between (pill→headline) and (headline→body),
+  // with floors of 28px and 36px so cramped layouts still breathe.
+  const CONTENT_TOP = 80;
+  const CONTENT_BOTTOM = 940;
+  const AVAILABLE_HEIGHT = CONTENT_BOTTOM - CONTENT_TOP; // 860
+  const MIN_GAP_PILL_HEADLINE = 28;
+  const MIN_GAP_HEADLINE_BODY = 36;
+  // Approximate cap heights for our two text fonts at their sizes — used to
+  // convert "visual top of block" into a fillText baseline.
+  const CAP_OFFSET_HEADLINE = 50; // 68px Jakarta ExtraBold
+  const CAP_OFFSET_BODY = 22; // 32px Open Sans
+
+  const pillHeight = 36;
+  const headlineFont = 68;
+  const headlineLineH = Math.round(headlineFont * 1.3); // 88
+  const bodyFont = 32;
+  const bodyLineH = Math.round(bodyFont * 1.5); // 48
+
+  // Measure headline and body at their real fonts before drawing anything.
+  ctx.font = `${headlineFont}px "Jakarta ExtraBold"`;
+  const headlineLines = wrapText(ctx, headline, textW).slice(0, 5);
+  const headlineBlockH = headlineLines.length * headlineLineH;
+
+  ctx.font = `${bodyFont}px "Open Sans"`;
+  const bodyLines = wrapText(ctx, bodyText, textW).slice(0, 8);
+  const bodyBlockH = bodyLines.length * bodyLineH;
+
+  const remaining = Math.max(
+    0,
+    AVAILABLE_HEIGHT - pillHeight - headlineBlockH - bodyBlockH
+  );
+  const gap1 = Math.max(MIN_GAP_PILL_HEADLINE, remaining * 0.25);
+  const gap2 = Math.max(MIN_GAP_HEADLINE_BODY, remaining * 0.4);
+
+  // 1. Category pill — tangerine background, white text, pinned at CONTENT_TOP.
+  if (category) {
+    ctx.font = '20px "Jakarta SemiBold"';
+    const pillText = category.toUpperCase();
+    const pillTextWidth = ctx.measureText(pillText).width;
+    const pillWidth = pillTextWidth + 28;
+    drawRoundedRect(
+      ctx,
+      contentX,
+      CONTENT_TOP,
+      pillWidth,
+      pillHeight,
+      pillHeight / 2
+    );
+    ctx.fillStyle = COLORS.tangerine;
+    ctx.fill();
+    ctx.fillStyle = COLORS.white;
+    ctx.fillText(pillText, contentX + 14, CONTENT_TOP + 24);
+  }
+
+  // 2. Headline — line-box top sits gap1 below the pill bottom.
+  const headlineBlockTop = CONTENT_TOP + pillHeight + gap1;
+  ctx.font = `${headlineFont}px "Jakarta ExtraBold"`;
+  ctx.fillStyle = COLORS.white;
+  let yPos = headlineBlockTop + CAP_OFFSET_HEADLINE;
+  for (const line of headlineLines) {
+    ctx.fillText(line, contentX, yPos);
+    yPos += headlineLineH;
+  }
+
+  // 3. Body — line-box top sits gap2 below the headline block bottom.
+  const bodyBlockTop = headlineBlockTop + headlineBlockH + gap2;
+  ctx.font = `${bodyFont}px "Open Sans"`;
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  yPos = bodyBlockTop + CAP_OFFSET_BODY;
+  for (const line of bodyLines) {
+    ctx.fillText(line, contentX, yPos);
+    yPos += bodyLineH;
+  }
+}
+
+function renderPhotoOverlayRight(ctx: SKRSContext2D, opts: ImageOptions) {
+  // Photo visible on the right; text in the green margin on the left
+  renderOverlayContent(ctx, opts, 48);
+}
+
+function renderPhotoOverlayLeft(ctx: SKRSContext2D, opts: ImageOptions) {
+  // Photo visible on the left; text in the green margin on the right
+  renderOverlayContent(ctx, opts, 572);
+}
+
 const RENDERERS: Record<ImageTemplateType, (ctx: SKRSContext2D, opts: ImageOptions) => void> = {
   stat_card: renderStatCard,
   quote_card: renderQuoteCard,
@@ -806,12 +1220,65 @@ const RENDERERS: Record<ImageTemplateType, (ctx: SKRSContext2D, opts: ImageOptio
   photo_tip: renderPhotoTip,
   photo_stat: renderPhotoStat,
   photo_quote: renderPhotoQuote,
+  photo_overlay_right: renderPhotoOverlayRight,
+  photo_overlay_left: renderPhotoOverlayLeft,
 };
 
 export async function generatePostImage(opts: ImageOptions): Promise<Buffer> {
   registerFonts();
   const canvas = createCanvas(opts.width, opts.height);
   const ctx = canvas.getContext("2d");
+
+  // Overlay templates: full-canvas brand-green background + inset Pexels
+  // photo (540x960, 60px inset top/bottom) with only the inner-edge
+  // corners rounded. Text and logo sit in the green margin on the opposite
+  // side from the photo.
+  //
+  // For photo_overlay_right: photo on RIGHT (x=500), text/logo on LEFT.
+  // For photo_overlay_left:  photo on LEFT  (x=40),  text/logo on RIGHT.
+  if (OVERLAY_TEMPLATES.includes(opts.templateType)) {
+    const photoOnRight = opts.templateType === "photo_overlay_right";
+    const logoSide: "left" | "right" = photoOnRight ? "left" : "right";
+
+    // Step 1 — solid brand-green panel fills the entire canvas
+    ctx.fillStyle = "#005C28";
+    ctx.fillRect(0, 0, opts.width, opts.height);
+
+    // Step 2 — inset Pexels photo with rounded inner corners
+    const photoUrl = await fetchPexelsPhoto(getOverlayPhotoQuery());
+    if (photoUrl) {
+      const photoRect = {
+        // Photo width reduced 15% (540 → 460). Still flush with the outer
+        // canvas edge: x=620 for a right-side photo (right edge lands at
+        // 1080), x=0 for a left-side photo. The green panel naturally
+        // fills the remaining space behind everything.
+        x: photoOnRight ? 620 : 0,
+        y: 60,
+        w: 460,
+        h: 960,
+      };
+      // Inner edge faces the text column: rounded LEFT on a right-side
+      // photo, rounded RIGHT on a left-side photo.
+      const roundedSide: "left" | "right" = photoOnRight ? "left" : "right";
+      ctx.filter = "grayscale(100%)";
+      await drawPhotoClipped(ctx, photoUrl, photoRect, roundedSide, 40);
+      ctx.filter = "none";
+      // If photo fetch fails, the green canvas behind shows through —
+      // acceptable graceful degradation.
+    }
+
+    // Step 3 — text content in the green margin opposite the photo
+    const renderer = RENDERERS[opts.templateType];
+    if (!renderer) {
+      throw new Error(`Unknown template type: ${opts.templateType}`);
+    }
+    renderer(ctx, opts);
+
+    // Step 4 — logo bottom corner of the text side
+    await drawOverlayLogo(ctx, logoSide, opts.width, opts.height);
+
+    return canvas.toBuffer("image/png");
+  }
 
   // Background: photo templates fetch from Pexels + paint a band; the
   // canvas templates load their PNG background from disk.

@@ -46,7 +46,9 @@ type ImageTemplateType =
   | "photo_landscape"
   | "photo_tip"
   | "photo_stat"
-  | "photo_quote";
+  | "photo_quote"
+  | "photo_overlay_right"
+  | "photo_overlay_left";
 
 interface GeneratedPost {
   linkedin_content: string;
@@ -103,25 +105,40 @@ function assignImageTemplate(
       base = { has_image: false, image_template_type: null };
   }
 
-  // Photo template injection — give the feed a natural mix of photo and
-  // graphic templates. Probabilities follow the brand brief.
-  if (category === "personal_take" || category === "savings_story") {
-    // 50% photo_landscape, otherwise keep the base (which may be null)
-    if (Math.random() > 0.5) {
-      return { has_image: true, image_template_type: "photo_landscape" };
-    }
-  } else if (category === "industry_tip" && base.has_image) {
-    // 40% photo_tip when an image was already scheduled
-    if (Math.random() > 0.6) {
-      return { has_image: true, image_template_type: "photo_tip" };
-    }
-  } else if (category === "did_you_know" && base.has_image) {
-    // 40% photo_stat when an image was already scheduled
-    if (Math.random() > 0.6) {
-      return { has_image: true, image_template_type: "photo_stat" };
-    }
+  // Photo template injection — give the feed a natural mix of overlay,
+  // photo, and graphic templates. Distribution per category from the brand
+  // brief. photo_overlay_* templates dominate eligible categories now.
+  const rand = Math.random();
+
+  if (category === "savings_story" || category === "personal_take") {
+    // 40% overlay_right, 20% overlay_left, 20% photo_landscape, 20% base
+    if (rand < 0.40) return { has_image: true, image_template_type: "photo_overlay_right" };
+    if (rand < 0.60) return { has_image: true, image_template_type: "photo_overlay_left" };
+    if (rand < 0.80) return { has_image: true, image_template_type: "photo_landscape" };
+    return base;
   }
 
+  if (category === "industry_tip") {
+    // 35% overlay_right, 15% overlay_left, 25% photo_tip, 25% tip_graphic
+    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
+    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
+    if (rand < 0.75) return { has_image: true, image_template_type: "photo_tip" };
+    return { has_image: true, image_template_type: "tip_graphic" };
+  }
+
+  if (category === "did_you_know") {
+    // 35% overlay_right, 15% overlay_left, 25% photo_stat, 25% existing canvas
+    // (alternates stat_card / did_you_know — mirrors the base rule)
+    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
+    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
+    if (rand < 0.75) return { has_image: true, image_template_type: "photo_stat" };
+    return {
+      has_image: true,
+      image_template_type: indexInCategory % 2 === 0 ? "stat_card" : "did_you_know",
+    };
+  }
+
+  // myth_busting and any other category fall through to the base rule.
   return base;
 }
 
@@ -423,7 +440,20 @@ export async function POST(request: NextRequest) {
       // empty text.
       let imageHeadline = includeImages ? (item.post.image_headline || null) : null;
       let imageBody = includeImages ? (item.post.image_body || null) : null;
-      if (includeImages && image.image_template_type === "photo_landscape" && item.category === "personal_take") {
+      // personal_take posts aren't in IMAGE_CATEGORIES so the LLM didn't
+      // produce image_headline / image_body. When a photo-based template
+      // lands on one, fall back to the post's own copy as the headline.
+      const personalTakePhotoTemplates = new Set([
+        "photo_landscape",
+        "photo_overlay_right",
+        "photo_overlay_left",
+      ]);
+      if (
+        includeImages &&
+        item.category === "personal_take" &&
+        image.image_template_type &&
+        personalTakePhotoTemplates.has(image.image_template_type)
+      ) {
         imageHeadline = item.post.linkedin_personal_content || item.post.linkedin_content;
         imageBody = "— Speck Hansen, Insero";
       }

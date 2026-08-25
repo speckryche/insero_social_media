@@ -46,7 +46,7 @@ export async function POST(
     if (type === "personal") {
       // Only regenerate linkedin_personal_content
       const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
         max_tokens: 1000,
         system: INSERO_SYSTEM_PROMPT,
         messages: [
@@ -92,7 +92,7 @@ No markdown fences.`,
     if (type === "company") {
       // Only regenerate linkedin_content (company)
       const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
         max_tokens: 1000,
         system: INSERO_SYSTEM_PROMPT,
         messages: [
@@ -145,7 +145,7 @@ No markdown fences.`,
       : "";
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-5",
       max_tokens: 3000,
       system: INSERO_SYSTEM_PROMPT,
       messages: [

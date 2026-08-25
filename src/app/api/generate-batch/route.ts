@@ -296,7 +296,7 @@ async function generateCategoryPosts(
     : SYSTEM_PROMPT;
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-5",
     // Scales with the request — per-category counts are no longer a flat 12.
     max_tokens: Math.min(16000, Math.max(4000, postCount * 850)),
     system: systemPrompt,

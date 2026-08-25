@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,10 @@ import {
   User,
   Camera,
   CameraOff,
+  Copy,
+  Check,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -150,6 +154,69 @@ function getWeekNumber(dateStr: string): number {
   return 4;
 }
 
+// Copies one variant's plain text and confirms inline on the button itself.
+// There's no toast system in the app, and a card carries up to five of these,
+// so the confirmation stays where the click happened.
+function CopyButton({ text, label }: { text: string | null | undefined; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  async function handleCopy() {
+    const value = text || "";
+    if (!value) return;
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      // clipboard API needs a secure context; fall back to a temporary textarea
+      try {
+        const el = document.createElement("textarea");
+        el.value = value;
+        el.setAttribute("readonly", "");
+        el.style.position = "fixed";
+        el.style.opacity = "0";
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+        setCopied(true);
+      } catch (err) {
+        console.error("Copy failed:", err);
+      }
+    }
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-xs h-6 px-2 text-gray-500 hover:text-gray-900"
+      onClick={handleCopy}
+      disabled={!text}
+      aria-label={`Copy ${label} text`}
+      title={`Copy ${label} text`}
+    >
+      {copied ? (
+        <>
+          <Check className="h-3 w-3 mr-0.5 text-green-600" />
+          Copied
+        </>
+      ) : (
+        <>
+          <Copy className="h-3 w-3 mr-0.5" />
+          Copy
+        </>
+      )}
+    </Button>
+  );
+}
+
 export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
   const router = useRouter();
   const [batch, setBatch] = useState<Batch>(initialBatch);
@@ -166,6 +233,21 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
   const [regeneratingImageId, setRegeneratingImageId] = useState<string | null>(null);
   const [togglingImageId, setTogglingImageId] = useState<string | null>(null);
   const [autoAddingImageId, setAutoAddingImageId] = useState<string | null>(null);
+  // Cards show full post text by default. Ids land here only when the user
+  // collapses that card back down to a four-line preview.
+  const [collapsedPostIds, setCollapsedPostIds] = useState<Set<string>>(new Set());
+
+  function toggleCollapsed(postId: string) {
+    setCollapsedPostIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(postId)) {
+        next.delete(postId);
+      } else {
+        next.add(postId);
+      }
+      return next;
+    });
+  }
 
   // A post counts as "approved" if its overall status is approved/scheduled/
   // published OR if either per-platform approval flag is true. The flag-true
@@ -958,21 +1040,31 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                       <User className="h-3.5 w-3.5 text-blue-600" />
                       <span className="text-xs font-medium text-gray-700">LinkedIn Personal</span>
                     </div>
-                    <Button
-                      variant={post.linkedin_personal_approved ? "default" : "outline"}
-                      size="sm"
-                      className={`text-xs h-6 px-2 ${
-                        post.linkedin_personal_approved
-                          ? "bg-green-600 hover:bg-green-700"
-                          : ""
-                      }`}
-                      onClick={() => handleToggleApprove(post.id, "personal")}
-                    >
-                      <CheckCircle2 className="h-3 w-3 mr-0.5" />
-                      {post.linkedin_personal_approved ? "Approved" : "Approve"}
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <CopyButton
+                        text={post.linkedin_personal_content}
+                        label="LinkedIn Personal"
+                      />
+                      <Button
+                        variant={post.linkedin_personal_approved ? "default" : "outline"}
+                        size="sm"
+                        className={`text-xs h-6 px-2 ${
+                          post.linkedin_personal_approved
+                            ? "bg-green-600 hover:bg-green-700"
+                            : ""
+                        }`}
+                        onClick={() => handleToggleApprove(post.id, "personal")}
+                      >
+                        <CheckCircle2 className="h-3 w-3 mr-0.5" />
+                        {post.linkedin_personal_approved ? "Approved" : "Approve"}
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-700 whitespace-pre-line line-clamp-4">
+                  <p
+                    className={`text-sm text-gray-700 whitespace-pre-wrap ${
+                      collapsedPostIds.has(post.id) ? "line-clamp-4" : ""
+                    }`}
+                  >
                     {post.linkedin_personal_content || "No personal content"}
                   </p>
                 </div>
@@ -982,21 +1074,31 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                       <Building2 className="h-3.5 w-3.5 text-blue-600" />
                       <span className="text-xs font-medium text-gray-700">LinkedIn Company</span>
                     </div>
-                    <Button
-                      variant={post.linkedin_company_approved ? "default" : "outline"}
-                      size="sm"
-                      className={`text-xs h-6 px-2 ${
-                        post.linkedin_company_approved
-                          ? "bg-green-600 hover:bg-green-700"
-                          : ""
-                      }`}
-                      onClick={() => handleToggleApprove(post.id, "company")}
-                    >
-                      <CheckCircle2 className="h-3 w-3 mr-0.5" />
-                      {post.linkedin_company_approved ? "Approved" : "Approve"}
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <CopyButton
+                        text={post.linkedin_content}
+                        label="LinkedIn Company"
+                      />
+                      <Button
+                        variant={post.linkedin_company_approved ? "default" : "outline"}
+                        size="sm"
+                        className={`text-xs h-6 px-2 ${
+                          post.linkedin_company_approved
+                            ? "bg-green-600 hover:bg-green-700"
+                            : ""
+                        }`}
+                        onClick={() => handleToggleApprove(post.id, "company")}
+                      >
+                        <CheckCircle2 className="h-3 w-3 mr-0.5" />
+                        {post.linkedin_company_approved ? "Approved" : "Approve"}
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-700 whitespace-pre-line line-clamp-4">
+                  <p
+                    className={`text-sm text-gray-700 whitespace-pre-wrap ${
+                      collapsedPostIds.has(post.id) ? "line-clamp-4" : ""
+                    }`}
+                  >
                     {post.linkedin_content}
                   </p>
                 </div>
@@ -1074,18 +1176,29 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="x" className="mt-3">
-                  <p className="text-sm text-gray-700">{post.x_content}</p>
+                  <div className="flex justify-end -mt-1 mb-1">
+                    <CopyButton text={post.x_content} label="X" />
+                  </div>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {post.x_content}
+                  </p>
                   <p className="text-xs text-gray-400 mt-1">
                     {post.x_content?.length || 0}/280 characters
                   </p>
                 </TabsContent>
                 <TabsContent value="facebook" className="mt-3">
-                  <p className="text-sm text-gray-700 whitespace-pre-line">
+                  <div className="flex justify-end -mt-1 mb-1">
+                    <CopyButton text={post.facebook_content} label="Facebook" />
+                  </div>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
                     {post.facebook_content}
                   </p>
                 </TabsContent>
                 <TabsContent value="google" className="mt-3">
-                  <p className="text-sm text-gray-700 whitespace-pre-line">
+                  <div className="flex justify-end -mt-1 mb-1">
+                    <CopyButton text={post.google_content} label="Google" />
+                  </div>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
                     {post.google_content}
                   </p>
                 </TabsContent>
@@ -1130,6 +1243,25 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
 
               {/* Post Actions */}
               <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => toggleCollapsed(post.id)}
+                  aria-expanded={!collapsedPostIds.has(post.id)}
+                >
+                  {collapsedPostIds.has(post.id) ? (
+                    <>
+                      <ChevronDown className="h-3.5 w-3.5 mr-1" />
+                      Expand
+                    </>
+                  ) : (
+                    <>
+                      <ChevronUp className="h-3.5 w-3.5 mr-1" />
+                      Collapse
+                    </>
+                  )}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"

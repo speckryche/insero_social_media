@@ -478,10 +478,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Test mode: 2 posts per category (4 company categories) = 8 total posts
-    const categoriesToGenerate: ContentCategory[] = testMode
-      ? ["bill_speak", "contract_speak", "quote_speak", "tech_speak"]
-      : CATEGORIES;
+    // Test mode: 2 posts per category across all five = 10 total posts.
+    // personal_take is included so a test batch also exercises Voice B — its
+    // two posts land on the first two bucket assignments.
+    const categoriesToGenerate: ContentCategory[] = CATEGORIES;
 
     const supabase = getSupabase();
     const anthropic = new Anthropic({
@@ -508,7 +508,9 @@ export async function POST(request: NextRequest) {
 
     // 1. Create the batch record
     const daysInMonth = new Date(year, month, 0).getDate();
-    const totalPosts = testMode ? 8 : Math.min(60, daysInMonth * 2);
+    const totalPosts = testMode
+      ? CATEGORIES.length * 2
+      : Math.min(60, daysInMonth * 2);
 
     const { data: batchData, error: batchError } = await supabase
       .from("batches")
@@ -571,6 +573,10 @@ export async function POST(request: NextRequest) {
       contract_speak: ["checklist", "comparison"],
       quote_speak: ["savings_highlight", "quote_card"],
       tech_speak: ["tip_graphic", "photo_tip"],
+      // personal_take gets no LLM image fields, so it only renders correctly
+      // on the photo templates the fallback below fills from the post's own
+      // copy. Anything else would come out with empty text.
+      personal_take: ["photo_overlay_right", "photo_landscape"],
     };
 
     // 7. Combine posts with schedule, image assignment, and category.

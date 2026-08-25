@@ -48,6 +48,7 @@ export async function POST(
       const message = await anthropic.messages.create({
         model: "claude-sonnet-5",
         max_tokens: 1000,
+        output_config: { effort: "low" },
         system: INSERO_SYSTEM_PROMPT,
         messages: [
           {
@@ -94,6 +95,7 @@ No markdown fences.`,
       const message = await anthropic.messages.create({
         model: "claude-sonnet-5",
         max_tokens: 1000,
+        output_config: { effort: "low" },
         system: INSERO_SYSTEM_PROMPT,
         messages: [
           {
@@ -147,6 +149,7 @@ No markdown fences.`,
     const message = await anthropic.messages.create({
       model: "claude-sonnet-5",
       max_tokens: 3000,
+      output_config: { effort: "low" },
       system: INSERO_SYSTEM_PROMPT,
       messages: [
         {

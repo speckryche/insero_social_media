@@ -368,23 +368,31 @@ async function generateCategoryPosts(
     : SYSTEM_PROMPT;
 
   // Test-mode batches ask for 2 posts per category; full batches ask for many
-  // more. Both get a generous ceiling — the old postCount * 850 scaling ran a
-  // 2-post test batch at 4000 and left no headroom for five platform variants
-  // plus image fields per post. 16000 is the practical cap for a non-streaming
-  // request; past that the SDK's HTTP timeout becomes the risk.
-  const maxTokens = postCount <= 3 ? 8000 : 16000;
+  // more. The ceiling has to cover thinking tokens as well as the JSON —
+  // Sonnet 5 thinks by default, and on a 2-post category that reasoning alone
+  // ran to ~2800 tokens, over half the old 8000 budget.
+  const maxTokens = postCount <= 3 ? 16000 : 32000;
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-5",
-    max_tokens: maxTokens,
-    system: systemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: buildCategoryPrompt(category, postCount),
-      },
-    ],
-  });
+  // Streamed so the larger ceiling can't trip the SDK's HTTP timeout on a
+  // long full-batch response. finalMessage() gives back the same Message
+  // shape messages.create() returned, so stop_reason and content still apply.
+  const message = await anthropic.messages
+    .stream({
+      model: "claude-sonnet-5",
+      max_tokens: maxTokens,
+      // Thinking stays on — disabling it on Sonnet 5 risks leaked reasoning
+      // tags — but low effort keeps it from eating the output budget on what
+      // is really just JSON assembly from an explicit spec.
+      output_config: { effort: "low" },
+      system: systemPrompt,
+      messages: [
+        {
+          role: "user",
+          content: buildCategoryPrompt(category, postCount),
+        },
+      ],
+    })
+    .finalMessage();
 
   // A truncated response yields invalid JSON. Say that plainly rather than
   // letting it surface as an opaque parse error.

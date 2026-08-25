@@ -15,11 +15,14 @@ export async function POST(
   try {
     const supabase = getSupabase();
 
-    // 1. Flip the personal-approved flag for every post in the batch.
+    // 1. Flip the personal-approved flag — personal_take posts only. Those are
+    //    the only ones that go on Speck's profile (skill file, Voice B — "How
+    //    the profile is fed"); the other categories carry no personal variant.
     const { error: flagError } = await supabase
       .from("posts")
       .update({ linkedin_personal_approved: true })
-      .eq("batch_id", params.id);
+      .eq("batch_id", params.id)
+      .eq("content_category", "personal_take");
 
     if (flagError) {
       return NextResponse.json({ error: flagError.message }, { status: 500 });
@@ -27,11 +30,13 @@ export async function POST(
 
     // 2. Keep post.status in sync: any draft/edited post now has at least
     //    one approval flag true, so promote them to "approved". Leave
-    //    scheduled/published rows alone — they're terminal-ish.
+    //    scheduled/published rows alone — they're terminal-ish. Scoped to the
+    //    same personal_take rows so nothing else is promoted without a flag.
     const { error: statusError } = await supabase
       .from("posts")
       .update({ status: "approved" })
       .eq("batch_id", params.id)
+      .eq("content_category", "personal_take")
       .in("status", ["draft", "edited"]);
 
     if (statusError) {

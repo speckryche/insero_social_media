@@ -623,7 +623,13 @@ export async function POST(request: NextRequest) {
         time_slot: sched.time_slot,
         content_category: item.category,
         linkedin_content: item.post.linkedin_content,
-        linkedin_personal_content: item.post.linkedin_personal_content,
+        // Only personal_take posts reach Speck's profile (skill file, Voice B —
+        // "How the profile is fed"). Blanking the variant everywhere else means
+        // there is nothing to approve or publish by accident.
+        linkedin_personal_content:
+          item.category === "personal_take"
+            ? item.post.linkedin_personal_content
+            : "",
         x_content: item.post.x_content,
         facebook_content: item.post.facebook_content,
         google_content: item.post.google_content,

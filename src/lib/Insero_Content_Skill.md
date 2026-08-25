@@ -36,14 +36,43 @@ Every post is written in exactly one of these. Never blend them.
 
 ### Voice B — Speck's personal profile
 
+**Theme: "No suit. Three businesses. One pool."**
+A guy who somehow ended up running a telecom brokerage, co-owning a crypto business, and building his own software with AI, and would rather be on a motorcycle. Goofy, a little awkward, never polished. He doesn't post at people; he reports what happened.
+
 - Audience: peers, customers, partners, people who know Speck
-- Purpose: show a real person who knows this industry cold and isn't selling
-- Length: 2–4 sentences. Occasionally one sentence.
-- Perspective: first person is fine here. "I", "we" (meaning Insero), both OK.
-- Reads like texting a friend. Lowercase-energy even when capitalized correctly.
-- **No hashtags. No emojis. No buzzwords. No CTAs. No links.**
-- Can be an observation, a small lesson, a mild opinion, a question, or a story from 25 years in telecom
-- Never humble-brag, never motivational-poster, never "excited to announce"
+- Purpose: show a real person. Trust first, business a distant second.
+- Length: **1–3 sentences.** If it needs a fourth, it's a company post.
+- Perspective: first person.
+- Admits the dumb thing first. No lesson at the end. No "grateful," "as a founder," "what I learned," "humbled."
+- Insero shows up in about 1 of 4 posts, mentioned like a job, never like a pitch. Never a link.
+- **No hashtags. No emojis. No CTAs. No links. No filler questions to the audience.**
+- Text only. Nothing that requires Speck's face or a photo of him.
+- Never "excited to announce." Never motivational-poster.
+
+**Five buckets — rotate evenly across a month**
+
+1. **Telecom, but human** — a Telecom-speak translation told as something that happened ("someone asked me this today"). Same no-carrier-bashing, no-numbers rules as Voice A.
+2. **Built this week** — an AI-coding win. One sentence on what it does, zero technical detail, no tool or stack names beyond "AI." Projects that are fair game: a commission-tracking portal, a company website, a mascot, a social-posting app, internal tools. Keep it high level and slightly amazed.
+3. **Crypto, sparked** — conversation-starters only: a big moment in the industry, a plain high-level question, a mild opinion about where it's going. **Never prices, predictions, coins to buy, trading, or Speck's holdings. Never mention his crypto business by name or type.** If the post needs a current event, it must come from `content_notes` supplied at batch time — never invented.
+4. **Off the clock** — motorcycle rides with wife and daughter (or solo), the backyard "mini resort" and pool, hiking (lots), golf (not lately), friends. Small, specific, real-feeling, hypothetical-safe.
+5. **Awkward moments** — small dumb things that happen to a guy who hates being in front of a camera. Self-aware, never self-pitying.
+
+**Samples of the voice**
+- Spent 25 years explaining phone bills to people. Today I couldn't explain my own pool pump.
+- Built a tool this week that tracks every commission we're owed. Immediately found out how many we weren't.
+- Wife and daughter both out-rode me on Saturday. I'm choosing to call that good parenting.
+- Golf is going great. I haven't played since April.
+- Serious question: if your grandma asked you what a stablecoin is, how many sentences would it take? I'm at four and losing her.
+- The carrier said "the site survey is pending." I've been in this long enough to hear "we haven't looked yet."
+
+**Speck facts the AI may use** (don't invent others)
+- 25+ years in telecom. Owned a CLEC (Infostructure) before Insero.
+- Owns Insero. Co-owns a crypto business (never named or described).
+- Builds his own software with AI. Doesn't own a suit. Lives in the Pacific Northwest.
+- Married, one daughter, on son. Rides motorcycles. Hikes a lot. Has a pool he's proud of. Plays golf rarely.
+
+**How the profile is fed**
+Only `personal_take` posts go on Speck's profile. The `linkedin_personal_content` variants generated alongside company posts are ignored and should not be published.
 
 ---
 
@@ -144,10 +173,7 @@ Human-speak: <plain version, with a smile if there's room>
 - **contract_speak** — a contract or renewal clause, translated
 - **quote_speak** — a line from a quote or proposal, translated
 - **tech_speak** — a technical term, acronym, or feature name, translated (SIP, UCaaS, POTS replacement, SD-WAN, CCaaS, symmetric, etc.). **About one third of tech_speak posts should be AI-in-voice features** from Section 4: AI receptionist, call summaries, agent assist, sentiment scoring, live translation, and so on.
-- **personal_take** — Voice B only. Speck's own observations and short stories. Can use the theme loosely ("things I translate for people all day") but is not required to.
-
-**Personal voice under this theme**
-Speck is the translator in real life. Posts can be a quick story of translating something for a customer (hypothetical framing), a mild opinion about why the industry talks like this, or a one-liner. Still 2–4 sentences, no hashtags, no links, no CTA.
+- **personal_take** — Voice B only. Rotate evenly across the five Voice B buckets. Not required to touch telecom.
 
 **Mix (~60 posts/month)**
 - bill_speak 20% · contract_speak 20% · quote_speak 15% · tech_speak 20% · personal_take 25%

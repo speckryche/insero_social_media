@@ -165,25 +165,69 @@ Tone is a knowledgeable friend, never a lecture. The reader should finish the po
 
 CRITICAL: Do not invent benchmark numbers or specifications (throughput figures, millisecond thresholds, uptime percentages). Describe what the term means and why it matters without fabricating specs.`,
 
-  personal_take: `Generate 12 "Personal Take" social media posts.
+  personal_take: `Generate 12 "Personal Take" posts for Speck's personal LinkedIn profile.
 
-Speck's genuine opinion on something in the telecom industry or in running a brokerage. These are the most human posts — first person, real perspective, a little edge when warranted. Shorter is better.
+These are Voice B only — see "Voice B — Speck's personal profile" in the system prompt. Theme: "No suit. Three businesses. One pool." A guy who somehow ended up running a telecom brokerage, co-owning a crypto business, and building his own software with AI, and would rather be on a motorcycle. Goofy, a little awkward, never polished. He reports what happened; he does not post at people.
 
-Draw from the Core Beliefs in the system prompt:
-- The quota problem — carrier reps motivated by end-of-month numbers
-- The trust problem in telecom
-- Going direct gives a narrow view
-- Complexity across multiple carriers is the real headache
-- 20 years on the carrier side as the CLEC owner — that's a real edge most brokers don't have
-
-CRITICAL: Do not fabricate specific events, conversations, or calls. Don't write "just got off the phone with..." or "happened to me yesterday." Use general framing instead:
-- "Something I've noticed after 20 years in this industry..."
-- "Here's a thing about telecom that bugs me..."
-- "One thing I'll say about carrier sales reps..."
-- "After running a phone company for two decades, I'll tell you..."
-
-Personal touches are welcome when they fit — a coffee shop, a trail, the Pacific Northwest, family, the pool with a mountain view — but never forced and never the whole point of the post.`,
+Voice B rules, all mandatory:
+- First person. Admits the dumb thing first. No lesson at the end.
+- No "grateful," "as a founder," "what I learned," "humbled," "excited to announce." Never motivational-poster.
+- No hashtags. No emojis. No CTAs. No links. No filler questions to the audience.
+- Insero shows up in about 1 post in 4, mentioned like a job, never like a pitch.
+- Text only — nothing that requires Speck's face or a photo of him.
+- Not required to touch telecom at all.`,
 };
+
+// Voice B's five buckets, from the skill file. Posts rotate through these in
+// order so a month's worth of personal posts can't cluster on one theme.
+const VOICE_B_BUCKETS: Array<{ name: string; brief: string }> = [
+  {
+    name: "Telecom, but human",
+    brief:
+      "A Telecom-speak translation told as something that happened (\"someone asked me this today\"). Same no-carrier-bashing, no-numbers rules as the company voice.",
+  },
+  {
+    name: "Built this week",
+    brief:
+      "An AI-coding win. One sentence on what it does, zero technical detail, no tool or stack names beyond \"AI.\" Fair game: a commission-tracking portal, a company website, a mascot, a social-posting app, internal tools. High level and slightly amazed.",
+  },
+  {
+    name: "Crypto, sparked",
+    brief:
+      "A conversation-starter only: a big moment in the industry, a plain high-level question, or a mild opinion about where it's going.",
+  },
+  {
+    name: "Off the clock",
+    brief:
+      "Motorcycle rides with wife and daughter (or solo), the backyard \"mini resort\" and pool, hiking (lots), golf (not lately), friends. Small, specific, real-feeling.",
+  },
+  {
+    name: "Awkward moments",
+    brief:
+      "A small dumb thing that happens to a guy who hates being in front of a camera. Self-aware, never self-pitying.",
+  },
+];
+
+const SPECK_FACTS = `Speck facts you may use (do not invent others):
+- 25+ years in telecom. Owned a CLEC (Infostructure) before Insero.
+- Owns Insero. Co-owns a crypto business (never named or described).
+- Builds his own software with AI. Doesn't own a suit. Lives in the Pacific Northwest.
+- Married, one daughter. Rides motorcycles. Hikes a lot. Has a pool he's proud of. Plays golf rarely.`;
+
+const CRYPTO_RESTRICTIONS = `Crypto restrictions — these apply to every post, not just the "Crypto, sparked" ones:
+- Never prices, predictions, coins to buy, trading, or Speck's holdings.
+- Never mention his crypto business by name or type.
+- If a post needs a current event, it must come from the user's additional guidance supplied at batch time — never invented.`;
+
+// Assigns each post an explicit bucket so the model can't cluster them.
+function buildBucketAssignments(postCount: number): string {
+  const lines = Array.from({ length: postCount }, (_, i) => {
+    const bucket = VOICE_B_BUCKETS[i % VOICE_B_BUCKETS.length];
+    return `Post ${i + 1} — ${bucket.name}: ${bucket.brief}`;
+  });
+
+  return lines.join("\n");
+}
 
 export type ImageCategory = "bill_speak" | "contract_speak" | "quote_speak" | "tech_speak";
 
@@ -191,6 +235,27 @@ const IMAGE_CATEGORIES: ContentCategory[] = ["bill_speak", "contract_speak", "qu
 
 export function buildCategoryPrompt(category: ContentCategory, postCount: number = 12): string {
   const hasImages = IMAGE_CATEGORIES.includes(category);
+  const isPersonalTake = category === "personal_take";
+
+  // personal_take is the only category that reaches Speck's profile, so it
+  // carries the Voice B bucket rotation, the facts list, and the crypto rules.
+  const voiceBBlock = isPersonalTake
+    ? `
+BUCKET ASSIGNMENTS — every post has an assigned bucket. Write each post in its own bucket, in this exact order. Do not cluster several posts on one bucket, and do not swap assignments around.
+
+${buildBucketAssignments(postCount)}
+
+${SPECK_FACTS}
+
+${CRYPTO_RESTRICTIONS}
+`
+    : "";
+
+  // Voice B is capped at 1-3 sentences by the skill file; every other category
+  // keeps the longer personal variant.
+  const personalVariantRule = isPersonalTake
+    ? `2. linkedin_personal_content: **1-3 sentences. Hard limit.** If it needs a fourth sentence, cut it down. This is the post — write it in the bucket assigned to it above. First person, Speck's voice, no hashtags, no emojis, no CTAs, no links, no questions to the audience.`
+    : `2. linkedin_personal_content: 50-120 words. First person ("I"), Speck's voice. No website CTAs. Skip hashtags or use 1 max. This is for a PERSONAL PROFILE — should feel like a real thought from someone with 20 years in telecom, not a polished post.`;
 
   const imageFields = hasImages
     ? `
@@ -226,12 +291,12 @@ Also generate image data for posts that will have branded images. Include these 
   const categoryPrompt = CATEGORY_PROMPTS[category].replace(/Generate 12/g, `Generate ${postCount}`);
 
   return `${categoryPrompt}
-
+${voiceBBlock}
 For each of the ${postCount} posts, generate FIVE platform-specific versions:
 
 1. linkedin_content: 100-200 words. Hook in the first line. Short paragraphs (1-2 sentences each) with white space between them. Max 3 hashtags at the end if any. ${linkedinCtaNote} This is for the COMPANY PAGE — use the company voice profile.
 
-2. linkedin_personal_content: 50-120 words. First person ("I"), Speck's voice. No website CTAs. Skip hashtags or use 1 max. This is for a PERSONAL PROFILE — should feel like a real thought from someone with 20 years in telecom, not a polished post.
+${personalVariantRule}
 
 3. x_content: Under 280 characters. Punchy, direct, no hashtags unless truly relevant. The single best sentence or thought from the LinkedIn version. Never include URLs.
 

@@ -285,6 +285,78 @@ function interleaveCategories(
   return result;
 }
 
+// Strips markdown code fences the model sometimes adds despite being told not
+// to. Handles both a fenced whole response and stray prose around the array.
+function stripCodeFences(raw: string): string {
+  let text = raw.trim();
+
+  if (text.startsWith("```")) {
+    text = text.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
+    text = text.trim();
+  }
+
+  // If anything still surrounds the array, keep only the array itself.
+  if (!text.startsWith("[")) {
+    const start = text.indexOf("[");
+    const end = text.lastIndexOf("]");
+    if (start !== -1 && end > start) {
+      text = text.slice(start, end + 1);
+    }
+  }
+
+  return text;
+}
+
+// The model writes multi-paragraph posts, and it occasionally emits a real
+// newline inside a JSON string value instead of \n — which makes JSON.parse
+// fail with "Unterminated string in JSON at position N". Walk the text and
+// escape raw control characters that appear inside string values, leaving
+// structural whitespace between tokens untouched.
+function escapeRawControlCharsInStrings(text: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+
+  for (const ch of text) {
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      out += ch;
+      continue;
+    }
+
+    if (inString) {
+      if (ch === "\n") {
+        out += "\\n";
+        continue;
+      }
+      if (ch === "\r") {
+        out += "\\r";
+        continue;
+      }
+      if (ch === "\t") {
+        out += "\\t";
+        continue;
+      }
+    }
+
+    out += ch;
+  }
+
+  return out;
+}
+
 async function generateCategoryPosts(
   anthropic: Anthropic,
   category: ContentCategory,
@@ -295,10 +367,16 @@ async function generateCategoryPosts(
     ? `${SYSTEM_PROMPT}\n\nADDITIONAL GUIDANCE FROM THE USER:\n${contentNotes}`
     : SYSTEM_PROMPT;
 
+  // Test-mode batches ask for 2 posts per category; full batches ask for many
+  // more. Both get a generous ceiling — the old postCount * 850 scaling ran a
+  // 2-post test batch at 4000 and left no headroom for five platform variants
+  // plus image fields per post. 16000 is the practical cap for a non-streaming
+  // request; past that the SDK's HTTP timeout becomes the risk.
+  const maxTokens = postCount <= 3 ? 8000 : 16000;
+
   const message = await anthropic.messages.create({
     model: "claude-sonnet-5",
-    // Scales with the request — per-category counts are no longer a flat 12.
-    max_tokens: Math.min(16000, Math.max(4000, postCount * 850)),
+    max_tokens: maxTokens,
     system: systemPrompt,
     messages: [
       {
@@ -308,19 +386,32 @@ async function generateCategoryPosts(
     ],
   });
 
+  // A truncated response yields invalid JSON. Say that plainly rather than
+  // letting it surface as an opaque parse error.
+  if (message.stop_reason === "max_tokens") {
+    throw new Error(
+      `Response for ${category} was cut off at the ${maxTokens} token limit (stop_reason: max_tokens) while generating ${postCount} posts. The JSON is incomplete — retry with fewer posts per category or a higher max_tokens.`
+    );
+  }
+
   const textBlock = message.content.find((block) => block.type === "text");
   if (!textBlock || textBlock.type !== "text") {
     throw new Error(`No text response for category: ${category}`);
   }
 
-  let jsonText = textBlock.text.trim();
+  const jsonText = escapeRawControlCharsInStrings(
+    stripCodeFences(textBlock.text)
+  );
 
-  // Strip markdown code fences if present
-  if (jsonText.startsWith("```")) {
-    jsonText = jsonText.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+  let posts: GeneratedPost[];
+  try {
+    posts = JSON.parse(jsonText);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Could not parse the JSON response for ${category} (${reason}). stop_reason was "${message.stop_reason}".`
+    );
   }
-
-  const posts: GeneratedPost[] = JSON.parse(jsonText);
 
   if (!Array.isArray(posts) || posts.length === 0) {
     throw new Error(

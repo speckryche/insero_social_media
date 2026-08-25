@@ -260,5 +260,7 @@ Respond with a JSON array of ${postCount} objects. Each object must have exactly
   "google_content": "..."${imageFieldsJson}
 }
 
+Use \\n for line breaks inside string values. Never emit a raw newline inside a string.
+
 Return ONLY the JSON array. No markdown fences, no explanation, no extra text.`;
 }

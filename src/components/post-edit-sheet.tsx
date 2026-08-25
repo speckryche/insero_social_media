@@ -102,10 +102,10 @@ export function PostEditSheet({ post, onClose, onSave }: PostEditSheetProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="did_you_know">Did You Know</SelectItem>
-                    <SelectItem value="savings_story">Savings Story</SelectItem>
-                    <SelectItem value="industry_tip">Industry Tip</SelectItem>
-                    <SelectItem value="myth_busting">Myth Busting</SelectItem>
+                    <SelectItem value="bill_speak">Bill Speak</SelectItem>
+                    <SelectItem value="contract_speak">Contract Speak</SelectItem>
+                    <SelectItem value="quote_speak">Quote Speak</SelectItem>
+                    <SelectItem value="tech_speak">Tech Speak</SelectItem>
                     <SelectItem value="personal_take">Personal Take</SelectItem>
                   </SelectContent>
                 </Select>

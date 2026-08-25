@@ -27,12 +27,49 @@ function getSupabase() {
 }
 
 const CATEGORIES: ContentCategory[] = [
-  "did_you_know",
-  "savings_story",
-  "industry_tip",
-  "myth_busting",
+  "bill_speak",
+  "contract_speak",
+  "quote_speak",
+  "tech_speak",
   "personal_take",
 ];
+
+// Share of every batch by category, per the content plan. Sums to 1.0.
+const CATEGORY_MIX: Record<ContentCategory, number> = {
+  bill_speak: 0.20,
+  contract_speak: 0.20,
+  quote_speak: 0.15,
+  tech_speak: 0.20,
+  personal_take: 0.25,
+};
+
+// Largest-remainder apportionment, so the per-category counts always sum to
+// exactly totalPosts no matter how many days the month has.
+function allocateByMix(totalPosts: number): Map<ContentCategory, number> {
+  const exact = CATEGORIES.map((category) => ({
+    category,
+    value: totalPosts * CATEGORY_MIX[category],
+  }));
+
+  const counts = new Map<ContentCategory, number>(
+    exact.map((e) => [e.category, Math.floor(e.value)])
+  );
+
+  let assigned = Array.from(counts.values()).reduce((a, b) => a + b, 0);
+  const byRemainder = [...exact].sort(
+    (a, b) => (b.value - Math.floor(b.value)) - (a.value - Math.floor(a.value))
+  );
+
+  let i = 0;
+  while (assigned < totalPosts) {
+    const { category } = byRemainder[i % byRemainder.length];
+    counts.set(category, counts.get(category)! + 1);
+    assigned++;
+    i++;
+  }
+
+  return counts;
+}
 
 type ImageTemplateType =
   | "stat_card"
@@ -69,7 +106,7 @@ function assignImageTemplate(
   // Base assignment (existing canvas-template rules)
   let base: { has_image: boolean; image_template_type: ImageTemplateType | null };
   switch (category) {
-    case "did_you_know":
+    case "bill_speak":
       base = indexInCategory >= 8
         ? { has_image: false, image_template_type: null }
         : {
@@ -77,7 +114,7 @@ function assignImageTemplate(
             image_template_type: indexInCategory % 2 === 0 ? "stat_card" : "did_you_know",
           };
       break;
-    case "savings_story":
+    case "quote_speak":
       base = indexInCategory % 2 === 0
         ? {
             has_image: true,
@@ -85,7 +122,7 @@ function assignImageTemplate(
           }
         : { has_image: false, image_template_type: null };
       break;
-    case "industry_tip":
+    case "tech_speak":
       base = indexInCategory % 2 === 1
         ? {
             has_image: true,
@@ -93,9 +130,12 @@ function assignImageTemplate(
           }
         : { has_image: false, image_template_type: null };
       break;
-    case "myth_busting":
-      base = indexInCategory < 4
-        ? { has_image: true, image_template_type: "myth_buster" }
+    case "contract_speak":
+      base = indexInCategory % 2 === 0
+        ? {
+            has_image: true,
+            image_template_type: indexInCategory % 4 === 0 ? "comparison" : "checklist",
+          }
         : { has_image: false, image_template_type: null };
       break;
     case "personal_take":
@@ -110,7 +150,7 @@ function assignImageTemplate(
   // brief. photo_overlay_* templates dominate eligible categories now.
   const rand = Math.random();
 
-  if (category === "savings_story" || category === "personal_take") {
+  if (category === "quote_speak" || category === "personal_take") {
     // 40% overlay_right, 20% overlay_left, 20% photo_landscape, 20% base
     if (rand < 0.40) return { has_image: true, image_template_type: "photo_overlay_right" };
     if (rand < 0.60) return { has_image: true, image_template_type: "photo_overlay_left" };
@@ -118,7 +158,7 @@ function assignImageTemplate(
     return base;
   }
 
-  if (category === "industry_tip") {
+  if (category === "tech_speak") {
     // 35% overlay_right, 15% overlay_left, 25% photo_tip, 25% tip_graphic
     if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
     if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
@@ -126,7 +166,7 @@ function assignImageTemplate(
     return { has_image: true, image_template_type: "tip_graphic" };
   }
 
-  if (category === "did_you_know") {
+  if (category === "bill_speak") {
     // 35% overlay_right, 15% overlay_left, 25% photo_stat, 25% existing canvas
     // (alternates stat_card / did_you_know — mirrors the base rule)
     if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
@@ -138,7 +178,16 @@ function assignImageTemplate(
     };
   }
 
-  // myth_busting and any other category fall through to the base rule.
+  if (category === "contract_speak") {
+    // 35% overlay_right, 15% overlay_left, 25% checklist, 25% comparison —
+    // clause breakdowns read best as lists and before/after pairs.
+    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
+    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
+    if (rand < 0.75) return { has_image: true, image_template_type: "checklist" };
+    return { has_image: true, image_template_type: "comparison" };
+  }
+
+  // Any other category falls through to the base rule.
   return base;
 }
 
@@ -248,7 +297,8 @@ async function generateCategoryPosts(
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: postCount <= 3 ? 4000 : 10000,
+    // Scales with the request — per-category counts are no longer a flat 12.
+    max_tokens: Math.min(16000, Math.max(4000, postCount * 850)),
     system: systemPrompt,
     messages: [
       {
@@ -329,10 +379,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Test mode: 2 posts per category (4 categories) = 8 total posts
-    const postsPerCategory = testMode ? 2 : 12;
-    const testCategories: ContentCategory[] = testMode
-      ? ["did_you_know", "savings_story", "industry_tip", "myth_busting"]
+    // Test mode: 2 posts per category (4 company categories) = 8 total posts
+    const categoriesToGenerate: ContentCategory[] = testMode
+      ? ["bill_speak", "contract_speak", "quote_speak", "tech_speak"]
       : CATEGORIES;
 
     const supabase = getSupabase();
@@ -395,8 +444,16 @@ export async function POST(request: NextRequest) {
     const contentNotes = settings.content_notes || "";
     const postsByCategory = new Map<ContentCategory, GeneratedPost[]>();
 
-    for (const category of testCategories) {
-      const posts = await generateCategoryPosts(anthropic, category, contentNotes, postsPerCategory);
+    // Per-category counts: flat 2 each in test mode, otherwise apportioned
+    // across the month by CATEGORY_MIX.
+    const categoryCounts = testMode
+      ? new Map<ContentCategory, number>(categoriesToGenerate.map((c) => [c, 2]))
+      : allocateByMix(totalPosts);
+
+    for (const category of categoriesToGenerate) {
+      const count = categoryCounts.get(category) ?? 0;
+      if (count === 0) continue;
+      const posts = await generateCategoryPosts(anthropic, category, contentNotes, count);
       postsByCategory.set(category, posts);
     }
 
@@ -411,10 +468,10 @@ export async function POST(request: NextRequest) {
 
     // Test mode template assignments: map category + index-in-category to a specific template
     const TEST_MODE_TEMPLATES: Record<string, ImageTemplateType[]> = {
-      did_you_know: ["stat_card", "did_you_know"],
-      savings_story: ["savings_highlight", "quote_card"],
-      industry_tip: ["tip_graphic", "checklist"],
-      myth_busting: ["myth_buster", "comparison"],
+      bill_speak: ["stat_card", "did_you_know"],
+      contract_speak: ["checklist", "comparison"],
+      quote_speak: ["savings_highlight", "quote_card"],
+      tech_speak: ["tip_graphic", "photo_tip"],
     };
 
     // 7. Combine posts with schedule, image assignment, and category.

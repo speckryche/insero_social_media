@@ -56,65 +56,114 @@ SHARED RULES FOR ALL POSTS:
 You must respond with valid JSON only. No markdown, no code fences, no extra text.`;
 
 export type ContentCategory =
-  | "did_you_know"
-  | "savings_story"
-  | "industry_tip"
-  | "myth_busting"
+  | "bill_speak"
+  | "contract_speak"
+  | "quote_speak"
+  | "tech_speak"
   | "personal_take";
 
+// Shared structure for the four company categories. Every post takes one piece
+// of industry jargon and translates it into plain English — what differs
+// between the categories is where the jargon comes from.
+const TELECOM_SPEAK_FORMAT = `FORMAT — Telecom-speak / Human-speak. Use this structure for every post in this category:
+
+1. Lead with the jargon itself, quoted exactly as it appears in the wild. That IS the hook — no setup sentence before it.
+2. Translate it into Human-speak: what it actually means, in the words Speck would use explaining it to someone at a coffee shop.
+3. Say why it matters — what it costs the reader, what it hides, or what they should go check.
+4. Stop when the thought is done.
+
+On LinkedIn and Facebook the explicit "Telecom-speak:" / "Human-speak:" framing reads well and you should use it in most posts. On X and Google Business Profile, keep the same two-part move but write it as normal prose — no labels.
+
+Rotate the jargon across the batch. Never translate the same term twice.`;
+
 export const CATEGORY_PROMPTS: Record<ContentCategory, string> = {
-  did_you_know: `Generate 12 "Did You Know" social media posts.
+  bill_speak: `Generate 12 "Bill Speak" social media posts.
 
-Short, punchy facts about telecom, technology, or the brokerage industry that most business owners don't know. Should make the reader think "huh, I didn't know that." Keep them grounded in real industry knowledge — don't fabricate specific statistics or invent numbers.
+Each post takes one line item off a business telecom bill and translates it into plain English.
 
-Frame these from Speck's perspective as someone who spent 20 years running a phone company. Things he's seen on bills, in contracts, on the inside of carrier sales operations — the stuff most customers never get exposed to. Vary the angle from post to post: auto-renewal traps, what's hidden in line items, what UCaaS platforms actually include, how pricing decisions get made on the carrier side, what carriers do and don't proactively offer existing customers, etc.`,
+JARGON SOURCE — BILL LINE ITEMS. Draw from charges that actually appear on invoices:
+- "Carrier Cost Recovery Fee"
+- "Federal Universal Service Fund (FUSF)"
+- "Regulatory Recovery Charge"
+- "Access Recovery Charge"
+- "E911 Surcharge"
+- "Property Tax Allotment"
+- "Administrative Expense Fee"
+- "Minimum Usage Charge" / shortfall billing
+- "Directory Assistance"
+- Per-line feature charges for things already bundled in the platform
 
-  savings_story: `Generate 12 "Savings Story" social media posts.
+${TELECOM_SPEAK_FORMAT}
 
-Real or composite situations where Insero helped a business get a better outcome — better pricing, a better-fit solution, time saved, or a headache avoided. Never name the customer.
+Speck ran a CLEC for nearly 20 years — he knows which of these are genuine pass-through costs and which are margin wearing a government-sounding name. Let that show without turning it into an accusation.
 
-CRITICAL: Do not invent specific dollar figures, percentages, or named scenarios. Frame in general terms ("better pricing than going direct", "got their telecom manager's time back", "ended up with the right fit") rather than fabricated specifics. Don't write "we just saved a customer $X" with made-up numbers.
+CRITICAL: Do not invent specific dollar amounts or percentages. "A couple of dollars a line" or "small enough to ignore until you multiply it by 40 lines" is fine. "$4,200 a year" is not.`,
 
-Use phrasing that's honest about recurring or composite scenarios:
-- "Worked with a county recently that needed to replace..."
-- "We see this one all the time — a business that..."
-- "One we handled this year — a [vertical] looking for..."
-- "Here's a scenario that comes up almost every week..."
+  contract_speak: `Generate 12 "Contract Speak" social media posts.
 
-The goal is real-feeling and useful without fabrication. Focus on the kind of outcome Insero delivers: doing the research, lining up demos, managing the process, getting better pricing than going direct, ongoing support after the contract is signed.`,
+Each post takes one clause out of a carrier contract and translates it into plain English.
 
-  industry_tip: `Generate 12 "Industry Tip" social media posts.
+JARGON SOURCE — CONTRACT CLAUSES. Draw from language that actually appears in carrier agreements:
+- "Auto-renewal" / "evergreen" clauses and the narrow cancellation window
+- "Early Termination Liability (ETL)"
+- "Minimum Annual Revenue Commitment (MARC)"
+- "Service Level Agreement" and what the credits are actually worth
+- "Rate stabilization" / rate-lock language that only locks one direction
+- "Term commencement" — when the clock actually starts
+- "Portability" and what happens to your numbers if you leave
+- "Force majeure" and outage credit exclusions
+- Ramp schedules and stepped pricing
 
-Practical advice for business owners and operations managers about telecom and technology decisions. Should be immediately useful — something the reader can act on or think about today.
+${TELECOM_SPEAK_FORMAT}
 
-Mix across the services Insero brokers: voice (UCaaS, SIP, hosted PBX), internet (fiber, broadband, dedicated, 5G), networking and SD-WAN, colocation, and cybersecurity. Useful topics include:
-- Auto-renewal clauses and how to escape them
-- When to review internet circuit pricing (and why providers don't proactively offer better rates)
-- What to ask before signing a multi-year contract
-- Redundancy and failover — what most businesses miss
-- What's actually included in modern UCaaS that you might already be paying for separately
-- Why bundling sometimes hurts and sometimes helps
-- What a "promotional" rate actually means after year one
+The useful move here is telling the reader exactly where to look in their own paperwork and what to do about it before renewal.
 
-Tone is direct and helpful — Speck has seen these mistakes a hundred times and is sharing what to watch for, not lecturing.`,
+CRITICAL: Do not fabricate specific contracts, customers, or conversations. Frame as what these clauses commonly say — "most agreements", "the standard language here is", "nine times out of ten this reads".`,
 
-  myth_busting: `Generate 12 "Myth Busting" social media posts.
+  quote_speak: `Generate 12 "Quote Speak" social media posts.
 
-Direct, confident takedowns of common misconceptions about telecom, brokers, or technology decisions. Lead with the myth stated clearly, then bust it cleanly with the reality. Confident, not aggressive.
+Each post takes one line off a carrier quote or proposal and translates it into plain English.
 
-Common myths to draw from:
-- "Using a broker costs more than going direct" → carriers compensate brokers directly, same as their own reps; customers pay nothing
-- "One carrier can give you the best deal" → they can only sell their own stuff; a broker has a view across dozens
-- "All carriers offer about the same pricing" → promotions, negotiation, and timing matter a lot
-- "Brokers are middlemen who slow things down" → a good broker speeds things up by filtering vendor noise and running demos
-- "If the price seems fine, the contract is fine" → auto-renewal clauses, ramp pricing, and term length often hide the real cost
-- "Switching carriers is too painful to be worth it" → it's usually less painful than people think, especially with someone managing the process
+JARGON SOURCE — QUOTE AND PROPOSAL LINES. Draw from what shows up on the paper before you sign:
+- "Promotional rate" and what year two looks like
+- "MRC" and "NRC" (monthly vs. non-recurring charges)
+- "Term: 36 months" and why the term drives the price
+- "Subject to site survey"
+- "Building is not lit" / "on-net vs. off-net"
+- "Estimated install: 90 days"
+- "Special construction charges"
+- "Best effort" vs. "dedicated" bandwidth on the same quote
+- "Plus taxes and fees" — the line that moves the real number
+- Quantity assumptions buried in the line items
 
-Format: state the myth, then the reality. Make the reader feel smart for learning the truth — not stupid for not knowing it.
+${TELECOM_SPEAK_FORMAT}
 
-CRITICAL: Do not fabricate specific conversations ("had someone tell me last week..."). Frame as common beliefs: "One thing I hear a lot is...", "A common assumption is...", "There's this idea out there that...".
+The point of this category is that a quote is a sales document, not a price. Teach the reader which line changes the total.
 
-CRITICAL: Do not invent specific percentages or dollar figures (e.g., "50% savings", "$10,000 saved", "40-50% differences"). The only specific figures allowed are those that appear in the brand bible's real customer stories. Use approximate language instead — "significantly", "sometimes double", "as much as half", "a lot more than people realize", "wildly different" — rather than inventing statistics.`,
+CRITICAL: Do not invent specific quoted prices, percentages, or install dates. Use relative language — "often jumps meaningfully", "the promo number is rarely the number you pay in year two".`,
+
+  tech_speak: `Generate 12 "Tech Speak" social media posts.
+
+Each post takes one technical term a vendor used in a meeting and translates it into plain English.
+
+JARGON SOURCE — TECHNICAL TERMS. Draw from what gets said on vendor calls:
+- "SIP trunk"
+- "UCaaS" / "CCaaS"
+- "SD-WAN"
+- "Symmetrical vs. asymmetrical bandwidth"
+- "Dedicated vs. shared / contended"
+- "Failover" and "diverse path"
+- "Latency, jitter, packet loss" — which one actually breaks a phone call
+- "Hosted PBX" vs. "on-prem"
+- "Colocation" and "cross-connect"
+- "MPLS" and why it keeps coming up
+- "Number porting"
+
+${TELECOM_SPEAK_FORMAT}
+
+Tone is a knowledgeable friend, never a lecture. The reader should finish the post able to use the term correctly in their next vendor call — and know the one question it lets them ask.
+
+CRITICAL: Do not invent benchmark numbers or specifications (throughput figures, millisecond thresholds, uptime percentages). Describe what the term means and why it matters without fabricating specs.`,
 
   personal_take: `Generate 12 "Personal Take" social media posts.
 
@@ -136,9 +185,9 @@ CRITICAL: Do not fabricate specific events, conversations, or calls. Don't write
 Personal touches are welcome when they fit — a coffee shop, a trail, the Pacific Northwest, family, the pool with a mountain view — but never forced and never the whole point of the post.`,
 };
 
-export type ImageCategory = "did_you_know" | "savings_story" | "industry_tip" | "myth_busting";
+export type ImageCategory = "bill_speak" | "contract_speak" | "quote_speak" | "tech_speak";
 
-const IMAGE_CATEGORIES: ContentCategory[] = ["did_you_know", "savings_story", "industry_tip", "myth_busting"];
+const IMAGE_CATEGORIES: ContentCategory[] = ["bill_speak", "contract_speak", "quote_speak", "tech_speak"];
 
 export function buildCategoryPrompt(category: ContentCategory, postCount: number = 12): string {
   const hasImages = IMAGE_CATEGORIES.includes(category);

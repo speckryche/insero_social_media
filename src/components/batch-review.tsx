@@ -73,29 +73,45 @@ const BATCH_STATUS_STYLES: Record<string, string> = {
 };
 
 const CATEGORY_STYLES: Record<string, string> = {
+  bill_speak: "bg-sky-100 text-sky-800",
+  contract_speak: "bg-rose-100 text-rose-800",
+  quote_speak: "bg-emerald-100 text-emerald-800",
+  tech_speak: "bg-amber-100 text-amber-800",
+  personal_take: "bg-violet-100 text-violet-800",
+  // Legacy categories — see note above.
   did_you_know: "bg-sky-100 text-sky-800",
   savings_story: "bg-emerald-100 text-emerald-800",
   industry_tip: "bg-amber-100 text-amber-800",
   myth_busting: "bg-rose-100 text-rose-800",
-  personal_take: "bg-violet-100 text-violet-800",
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
+  bill_speak: "Bill Speak",
+  contract_speak: "Contract Speak",
+  quote_speak: "Quote Speak",
+  tech_speak: "Tech Speak",
+  personal_take: "Personal Take",
+  // Legacy categories — kept so posts from pre-Telecom-speak batches still
+  // render a label. Not offered in any picker.
   did_you_know: "Did You Know",
   savings_story: "Savings Story",
   industry_tip: "Industry Tip",
   myth_busting: "Myth Busting",
-  personal_take: "Personal Take",
 };
 
 // Default image template to assign when a user toggles "Include image" on a
 // post that has no image_template_type set (e.g., a text-only batch).
 const DEFAULT_TEMPLATE_BY_CATEGORY: Record<string, string> = {
+  bill_speak: "photo_stat",
+  contract_speak: "checklist",
+  quote_speak: "photo_landscape",
+  tech_speak: "photo_tip",
+  personal_take: "photo_landscape",
+  // Legacy categories — see note above.
   did_you_know: "photo_stat",
   savings_story: "photo_landscape",
   industry_tip: "photo_tip",
   myth_busting: "myth_buster",
-  personal_take: "photo_landscape",
 };
 
 // All 12 templates the user can pick from the per-post template selector.
@@ -836,10 +852,10 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
-            <SelectItem value="did_you_know">Did You Know</SelectItem>
-            <SelectItem value="savings_story">Savings Story</SelectItem>
-            <SelectItem value="industry_tip">Industry Tip</SelectItem>
-            <SelectItem value="myth_busting">Myth Busting</SelectItem>
+            <SelectItem value="bill_speak">Bill Speak</SelectItem>
+            <SelectItem value="contract_speak">Contract Speak</SelectItem>
+            <SelectItem value="quote_speak">Quote Speak</SelectItem>
+            <SelectItem value="tech_speak">Tech Speak</SelectItem>
             <SelectItem value="personal_take">Personal Take</SelectItem>
           </SelectContent>
         </Select>

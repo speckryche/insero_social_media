@@ -39,6 +39,28 @@ const PROGRESS_MESSAGES = [
   "Almost done...",
 ];
 
+type BatchScope = "both" | "company" | "personal";
+
+const SCOPE_OPTIONS: Array<{ value: BatchScope; label: string; hint: string }> = [
+  { value: "both", label: "Both", hint: "Company page + Speck's profile" },
+  { value: "company", label: "Company only", hint: "The four Telecom-speak categories" },
+  { value: "personal", label: "Personal only", hint: "Personal Take posts only" },
+];
+
+// Full-batch post counts per scope — the share each side would get inside a
+// 60-post Both batch. Test mode is 2 per included category instead.
+const SCOPE_FULL_COUNTS: Record<BatchScope, number> = {
+  both: 60,
+  company: 45,
+  personal: 15,
+};
+
+const SCOPE_TEST_COUNTS: Record<BatchScope, number> = {
+  both: 10,
+  company: 8,
+  personal: 2,
+};
+
 export function GenerateBatchModal() {
   const router = useRouter();
   const now = new Date();
@@ -50,6 +72,7 @@ export function GenerateBatchModal() {
   const [month, setMonth] = useState(String(defaultMonth));
   const [year, setYear] = useState(String(defaultYear));
   const [testMode, setTestMode] = useState(false);
+  const [scope, setScope] = useState<BatchScope>("both");
   const [includeImages, setIncludeImages] = useState(true);
   const [loading, setLoading] = useState(false);
   const [progressIndex, setProgressIndex] = useState(0);
@@ -76,6 +99,7 @@ export function GenerateBatchModal() {
           year: parseInt(year),
           testMode,
           includeImages,
+          scope,
         }),
       });
 
@@ -99,6 +123,9 @@ export function GenerateBatchModal() {
   const currentYear = now.getFullYear();
   const years = [currentYear, currentYear + 1];
 
+  const postCount = testMode ? SCOPE_TEST_COUNTS[scope] : SCOPE_FULL_COUNTS[scope];
+  const scopeLabel = SCOPE_OPTIONS.find((o) => o.value === scope)!.label;
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!loading || error) { setOpen(v); setLoading(false); setError(null); } }}>
       <DialogTrigger asChild>
@@ -116,7 +143,9 @@ export function GenerateBatchModal() {
             <Loader2 className="h-10 w-10 text-blue-600 animate-spin" />
             <div className="text-center">
               <p className="font-medium text-gray-900">
-                {testMode ? "Generating 10 test posts..." : "Generating 60 posts..."}
+                {testMode
+                  ? `Generating ${postCount} test posts...`
+                  : `Generating ${postCount} posts...`}
               </p>
               <p className="text-sm text-gray-500 mt-1">
                 {PROGRESS_MESSAGES[progressIndex]}
@@ -135,8 +164,8 @@ export function GenerateBatchModal() {
               </DialogTitle>
               <DialogDescription>
                 {testMode
-                  ? "Generate 10 test posts (2 per category, all five) to review content quality and image templates before committing to a full batch."
-                  : "Generate 60 AI-written posts (2 per day for 30 days). You can review and edit them before approving."}
+                  ? `Generate ${postCount} test posts (2 per category, ${scopeLabel.toLowerCase()}) to review content quality and image templates before committing to a full batch.`
+                  : `Generate ${postCount} AI-written posts (${scopeLabel.toLowerCase()}), spread across the month. You can review and edit them before approving.`}
               </DialogDescription>
             </DialogHeader>
 
@@ -174,6 +203,53 @@ export function GenerateBatchModal() {
                 </div>
               </div>
 
+              {/* Scope — a radio group built from buttons so it needs no new
+                  dependency. role/aria-checked keep it a real radio group. */}
+              <div className="space-y-2">
+                <Label>Scope</Label>
+                <div role="radiogroup" aria-label="Batch scope" className="grid gap-1.5">
+                  {SCOPE_OPTIONS.map((option) => {
+                    const selected = scope === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setScope(option.value)}
+                        className={`flex items-start gap-2.5 rounded-lg border p-2.5 text-left transition-colors ${
+                          selected
+                            ? "border-blue-600 bg-blue-50"
+                            : "border-gray-200 hover:bg-gray-50"
+                        }`}
+                      >
+                        <span
+                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                            selected ? "border-blue-600" : "border-gray-300"
+                          }`}
+                        >
+                          {selected && (
+                            <span className="h-2 w-2 rounded-full bg-blue-600" />
+                          )}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium text-gray-900">
+                            {option.label}
+                          </span>
+                          <span className="block text-xs text-gray-500">
+                            {option.hint} &middot;{" "}
+                            {testMode
+                              ? SCOPE_TEST_COUNTS[option.value]
+                              : SCOPE_FULL_COUNTS[option.value]}{" "}
+                            posts
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="testMode"
@@ -181,7 +257,7 @@ export function GenerateBatchModal() {
                   onCheckedChange={(checked) => setTestMode(checked === true)}
                 />
                 <Label htmlFor="testMode" className="text-sm font-normal cursor-pointer">
-                  Test mode (10 posts — 2 per category, faster generation)
+                  Test mode ({postCount} posts — 2 per category, faster generation)
                 </Label>
               </div>
 
@@ -213,7 +289,9 @@ export function GenerateBatchModal() {
                 onClick={handleGenerate}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
-                {testMode ? "Generate 10 Test Posts" : "Generate 60 Posts"}
+                {testMode
+                  ? `Generate ${postCount} Test Posts`
+                  : `Generate ${postCount} Posts`}
               </Button>
             </div>
           </>

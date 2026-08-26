@@ -167,15 +167,37 @@ CRITICAL: Do not invent benchmark numbers or specifications (throughput figures,
 
   personal_take: `Generate 12 "Personal Take" posts for Speck's personal LinkedIn profile.
 
-These are Voice B only — see "Voice B — Speck's personal profile" in the system prompt. Theme: "No suit. Three businesses. One pool." A guy who somehow ended up running a telecom brokerage, co-owning a crypto business, and building his own software with AI, and would rather be on a motorcycle. Goofy, a little awkward, never polished. He reports what happened; he does not post at people.
+These are Voice B only — see "Voice B — Speck's personal profile" in the system prompt. Theme: "No suit. Three businesses. One pool." A guy who somehow ended up running a telecom brokerage, co-owning a crypto business, and building his own software with AI, and would rather be on a motorcycle. Goofy, warm, a little awkward, never polished.
 
-Voice B rules, all mandatory:
-- First person. Admits the dumb thing first. No lesson at the end.
-- No "grateful," "as a founder," "what I learned," "humbled," "excited to announce." Never motivational-poster.
-- No hashtags. No emojis. No CTAs. No links. No filler questions to the audience.
-- Insero shows up in about 1 post in 4, mentioned like a job, never like a pitch.
-- Text only — nothing that requires Speck's face or a photo of him.
-- Not required to touch telecom at all.`,
+THE REGISTER — the most important part of this brief:
+Speck is NOT deadpan or dry. He is warm, excited, and happily self-roasting. He likes the people and tools he works with and says so. He gets a kick out of things. Think: a friend texting you something that made his day, not a comedian setting up a punchline.
+
+- Enthusiasm is allowed and encouraged. One exclamation point per post is fine. Two is too many.
+- Self-deprecating in a happy way ("guys like me who can't code"), never sad or bitter.
+- Names tools and people affectionately (his "BFF Claude", his wife and kids out-riding him).
+- Humor comes from delight and honesty, not from cleverness. No punchlines that need a beat. No wordplay. No sarcasm.
+- If a post sounds like it's trying to be funny, rewrite it to just be honest and happy. That's where the funny is.
+- Plain, casual, slightly run-on is fine. Capitalization can be loose. This is a text message, not copy.
+
+REFERENCE LINE, written by Speck himself:
+"Spent the week building a commission tracker with my new BFF named Claude - he's simply Amazing! AI makes dummy's like me feel smart!"
+Every personal post should sound like the same person wrote that.
+
+RULES:
+- 1-3 sentences. If it needs a fourth, it's a company post.
+- First person.
+- One idea per post. No "but also."
+- No lesson at the end. No "grateful," "as a founder," "what I learned," "humbled," "excited to announce."
+- Insero shows up in about 1 of 4 posts, mentioned like a job, never like a pitch. Never a link.
+- No hashtags. No emojis. No CTAs. No links. No filler questions to the audience. (A real question Speck actually wants answered is fine.)
+- Text only. Nothing that requires Speck's face or a photo of him.
+
+SAMPLES OF THE VOICE — the samples show the register only — never reuse their topics or sentence structure.
+- Spent the week building a commission tracker with my new BFF Claude. Guys like me who can't code just built software. What a time to be alive!
+- Went riding with my wife and daughter today. Got out-ridden by both of them and I'm weirdly proud about it.
+- Customer called totally lost about a line on their phone bill. Five minutes later he said "why didn't anyone just tell me that?" Great question honestly. That's the whole job!
+- Golf update: still not playing. Pool update: thriving.
+- Serious question for the crypto people: how do you explain a stablecoin to a friend in one sentence? I'm at four and losing them.`,
 };
 
 // Voice B's five buckets, from the skill file. Posts rotate through these in
@@ -184,40 +206,41 @@ const VOICE_B_BUCKETS: Array<{ name: string; brief: string }> = [
   {
     name: "Telecom, but human",
     brief:
-      "A Telecom-speak translation told as something that happened (\"someone asked me this today\"). Same no-carrier-bashing, no-numbers rules as the company voice.",
+      "Something that happened with a customer or a bill, told with delight (\"why didn't anyone just tell me that?\"). Same no-carrier-bashing, no-numbers rules as Voice A.",
   },
   {
     name: "Built this week",
     brief:
-      "An AI-coding win. One sentence on what it does, zero technical detail, no tool or stack names beyond \"AI.\" Fair game: a commission-tracking portal, a company website, a mascot, a social-posting app, internal tools. High level and slightly amazed.",
+      "An AI-coding win, high level, slightly amazed that a non-coder built it. No stack or tool names beyond \"AI\" and \"Claude.\" Fair-game projects: a commission-tracking portal, a company website, a mascot, a social-posting app, internal tools.",
   },
   {
     name: "Crypto, sparked",
     brief:
-      "A conversation-starter only: a big moment in the industry, a plain high-level question, or a mild opinion about where it's going.",
+      "A conversation-starter only: a big moment in the industry, a plain high-level question, or a mild opinion.",
   },
   {
     name: "Off the clock",
     brief:
-      "Motorcycle rides with wife and daughter (or solo), the backyard \"mini resort\" and pool, hiking (lots), golf (not lately), friends. Small, specific, real-feeling.",
+      "Motorcycle rides with wife and kids (or solo), the backyard \"mini resort\" and pool, hiking (lots), golf (not lately), friends.",
   },
   {
     name: "Awkward moments",
     brief:
-      "A small dumb thing that happens to a guy who hates being in front of a camera. Self-aware, never self-pitying.",
+      "A small dumb thing that happens to a guy who hates being in front of a camera. Self-aware and cheerful, never self-pitying.",
   },
 ];
 
 const SPECK_FACTS = `Speck facts you may use (do not invent others):
 - 25+ years in telecom. Owned a CLEC (Infostructure) before Insero.
 - Owns Insero. Co-owns a crypto business (never named or described).
-- Builds his own software with AI. Doesn't own a suit. Lives in the Pacific Northwest.
-- Married, one daughter. Rides motorcycles. Hikes a lot. Has a pool he's proud of. Plays golf rarely.`;
+- Builds his own software with AI (Claude). Doesn't own a suit. Lives in the Pacific Northwest.
+- Married, one son, one daughter. Rides motorcycles. Hikes a lot. Has a pool he's proud of. Plays golf rarely.
+- Never reference Speck's parents, extended family, or anyone's health.`;
 
 const CRYPTO_RESTRICTIONS = `Crypto restrictions — these apply to every post, not just the "Crypto, sparked" ones:
 - Never prices, predictions, coins to buy, trading, or Speck's holdings.
-- Never mention his crypto business by name or type.
-- If a post needs a current event, it must come from the user's additional guidance supplied at batch time — never invented.`;
+- Never mention his crypto business.
+- Current events must come from the user's additional guidance supplied at batch time — never invented.`;
 
 // Assigns each post an explicit bucket so the model can't cluster them.
 function buildBucketAssignments(postCount: number): string {
@@ -251,6 +274,15 @@ ${CRYPTO_RESTRICTIONS}
 `
     : "";
 
+  // The four _speak categories are company-page voice. Voice A is plural and
+  // institutional; a stray "I" reads as Speck posting from the company page.
+  const companyVoiceRule = isPersonalTake
+    ? ""
+    : `
+COMPANY VOICE — applies to linkedin_content, x_content, facebook_content, and google_content:
+Never use first-person singular. No "I", "me", "my", "DM me". Always we/our/Insero.
+`;
+
   // Voice B is capped at 1-3 sentences by the skill file; every other category
   // keeps the longer personal variant.
   const personalVariantRule = isPersonalTake
@@ -279,10 +311,12 @@ Also generate image data for posts that will have branded images. Include these 
   "image_stat_label": "..."`
     : "";
 
-  // CTAs are rare per the brand bible — most posts should not have one.
+  // CTAs are rare per the brand bible — most posts should not have one. The
+  // examples stay plural: linkedin_content is the company page, so a
+  // first-person-singular CTA would break the company voice rule above.
   const linkedinCtaNote = postCount <= 3
-    ? "Most posts should NOT have a CTA. If one fits naturally, use a soft prompt like \"DM me if you want to talk through your situation\" in at most 1 of the posts."
-    : `Most posts should NOT have a CTA — a CTA on every post looks desperate. In about 20% of posts (${Math.round(postCount * 0.2)} out of ${postCount}), include a soft, organic prompt like "DM me if you want to talk through your situation" or "happy to compare options for you" — never a hard sales ask, never a link to a landing page.`;
+    ? "Most posts should NOT have a CTA. If one fits naturally, use a soft prompt like \"DM us if you want to talk through your situation\" in at most 1 of the posts."
+    : `Most posts should NOT have a CTA — a CTA on every post looks desperate. In about 20% of posts (${Math.round(postCount * 0.2)} out of ${postCount}), include a soft, organic prompt like "DM us if you want to talk through your situation" or "happy to compare options for you" — never a hard sales ask, never a link to a landing page.`;
   const googleCtaNote = postCount <= 3
     ? "In at most 1 of the posts, include a soft mention like \"reach out for a comparison\" or a low-key reference to www.insero.cloud."
     : `In about 30% of posts (${Math.round(postCount * 0.3)} out of ${postCount}), include a soft mention like "reach out for a comparison" or a low-key reference to www.insero.cloud. Most posts should just be useful information with no CTA.`;
@@ -291,7 +325,7 @@ Also generate image data for posts that will have branded images. Include these 
   const categoryPrompt = CATEGORY_PROMPTS[category].replace(/Generate 12/g, `Generate ${postCount}`);
 
   return `${categoryPrompt}
-${voiceBBlock}
+${voiceBBlock}${companyVoiceRule}
 For each of the ${postCount} posts, generate FIVE platform-specific versions:
 
 1. linkedin_content: 100-200 words. Hook in the first line. Short paragraphs (1-2 sentences each) with white space between them. Max 3 hashtags at the end if any. ${linkedinCtaNote} This is for the COMPANY PAGE — use the company voice profile.

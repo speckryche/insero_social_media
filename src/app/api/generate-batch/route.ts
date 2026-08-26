@@ -43,12 +43,49 @@ const CATEGORY_MIX: Record<ContentCategory, number> = {
   personal_take: 0.25,
 };
 
+// Which categories a batch scope covers.
+type BatchScope = "both" | "company" | "personal";
+
+const COMPANY_CATEGORIES: ContentCategory[] = [
+  "bill_speak",
+  "contract_speak",
+  "quote_speak",
+  "tech_speak",
+];
+
+function categoriesForScope(scope: BatchScope): ContentCategory[] {
+  if (scope === "company") return COMPANY_CATEGORIES;
+  if (scope === "personal") return ["personal_take"];
+  return CATEGORIES;
+}
+
+// Full-batch totals. A scoped batch gets exactly the share it would have had
+// inside a 60-post "both" batch: company 75% = 45, personal 25% = 15.
+function totalPostsForScope(scope: BatchScope, daysInMonth: number): number {
+  const both = Math.min(60, daysInMonth * 2);
+  const share = categoriesForScope(scope).reduce(
+    (sum, category) => sum + CATEGORY_MIX[category],
+    0
+  );
+  return Math.round(both * share);
+}
+
 // Largest-remainder apportionment, so the per-category counts always sum to
-// exactly totalPosts no matter how many days the month has.
-function allocateByMix(totalPosts: number): Map<ContentCategory, number> {
-  const exact = CATEGORIES.map((category) => ({
+// exactly totalPosts no matter how many days the month has. Weights are
+// renormalized over the included categories, which keeps the relative
+// CATEGORY_MIX proportions intact when a scope excludes some of them.
+function allocateByMix(
+  totalPosts: number,
+  categories: ContentCategory[] = CATEGORIES
+): Map<ContentCategory, number> {
+  const weightSum = categories.reduce(
+    (sum, category) => sum + CATEGORY_MIX[category],
+    0
+  );
+
+  const exact = categories.map((category) => ({
     category,
-    value: totalPosts * CATEGORY_MIX[category],
+    value: (totalPosts * CATEGORY_MIX[category]) / weightSum,
   }));
 
   const counts = new Map<ContentCategory, number>(
@@ -382,8 +419,11 @@ async function generateCategoryPosts(
       max_tokens: maxTokens,
       // Thinking stays on — disabling it on Sonnet 5 risks leaked reasoning
       // tags — but low effort keeps it from eating the output budget on what
-      // is really just JSON assembly from an explicit spec.
-      output_config: { effort: "low" },
+      // is really just JSON assembly from an explicit spec. personal_take is
+      // the exception: hitting Voice B's register takes more room to think.
+      output_config: {
+        effort: category === "personal_take" ? "medium" : "low",
+      },
       system: systemPrompt,
       messages: [
         {
@@ -469,7 +509,13 @@ async function generateImagesForPost(
 export async function POST(request: NextRequest) {
   let batch: { id: string } | null = null;
   try {
-    const { month, year, testMode, includeImages = true } = await request.json();
+    const {
+      month,
+      year,
+      testMode,
+      includeImages = true,
+      scope: rawScope = "both",
+    } = await request.json();
 
     if (!month || !year || month < 1 || month > 12) {
       return NextResponse.json(
@@ -478,10 +524,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Test mode: 2 posts per category across all five = 10 total posts.
-    // personal_take is included so a test batch also exercises Voice B — its
-    // two posts land on the first two bucket assignments.
-    const categoriesToGenerate: ContentCategory[] = CATEGORIES;
+    if (!["both", "company", "personal"].includes(rawScope)) {
+      return NextResponse.json(
+        { error: `Invalid scope: ${rawScope}` },
+        { status: 400 }
+      );
+    }
+    const scope = rawScope as BatchScope;
+
+    // Scope picks the categories; test mode then takes 2 from each of them.
+    const categoriesToGenerate: ContentCategory[] = categoriesForScope(scope);
 
     const supabase = getSupabase();
     const anthropic = new Anthropic({
@@ -509,12 +561,12 @@ export async function POST(request: NextRequest) {
     // 1. Create the batch record
     const daysInMonth = new Date(year, month, 0).getDate();
     const totalPosts = testMode
-      ? CATEGORIES.length * 2
-      : Math.min(60, daysInMonth * 2);
+      ? categoriesToGenerate.length * 2
+      : totalPostsForScope(scope, daysInMonth);
 
     const { data: batchData, error: batchError } = await supabase
       .from("batches")
-      .insert({ month, year, status: "draft", total_posts: totalPosts })
+      .insert({ month, year, status: "draft", total_posts: totalPosts, scope })
       .select()
       .single();
 
@@ -549,7 +601,7 @@ export async function POST(request: NextRequest) {
     // across the month by CATEGORY_MIX.
     const categoryCounts = testMode
       ? new Map<ContentCategory, number>(categoriesToGenerate.map((c) => [c, 2]))
-      : allocateByMix(totalPosts);
+      : allocateByMix(totalPosts, categoriesToGenerate);
 
     for (const category of categoriesToGenerate) {
       const count = categoryCounts.get(category) ?? 0;

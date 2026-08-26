@@ -186,7 +186,7 @@ REFERENCE LINE, written by Speck himself:
 Every personal post should sound like the same person wrote that. Do not reuse its wording. There are intentionally no sample posts. Write each post fresh from its bucket, the register, and the facts.
 
 RULES:
-- 1-3 sentences. If it needs a fourth, it's a company post.
+- 2-5 sentences. Shorter is fine. If it needs a sixth, it's a company post.
 - First person.
 - One idea per post. No "but also."
 - No lesson at the end. No "grateful," "as a founder," "what I learned," "humbled," "excited to announce."
@@ -338,10 +338,10 @@ COMPANY VOICE — applies to ${companyVoiceFields.join(", ")}:
 Never use first-person singular. No "I", "me", "my", "DM me". Always we/our/Insero.
 `;
 
-  // Voice B is capped at 1-3 sentences by the skill file; every other category
+  // Voice B is capped at 2-5 sentences by the skill file; every other category
   // keeps the longer personal variant.
   const personalVariantRule = isPersonalTake
-    ? `2. linkedin_personal_content: **1-3 sentences. Hard limit.** If it needs a fourth sentence, cut it down. This is the post — write it in the bucket assigned to it above. First person, Speck's voice, no hashtags, no emojis, no CTAs, no links. Ending on a question to the reader is fine when Speck would actually want the answer.`
+    ? `2. linkedin_personal_content: **2-5 sentences. Shorter is fine.** If it needs a sixth sentence, cut it down. This is the post — write it in the bucket assigned to it above. First person, Speck's voice, no hashtags, no emojis, no CTAs, no links. Ending on a question to the reader is fine when Speck would actually want the answer.`
     : `2. linkedin_personal_content: 50-120 words. First person ("I"), Speck's voice. No website CTAs. Skip hashtags or use 1 max. This is for a PERSONAL PROFILE — should feel like a real thought from someone with 20 years in telecom, not a polished post.`;
 
   const imageFields = hasImages

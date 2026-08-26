@@ -54,7 +54,7 @@ Speck is NOT deadpan or dry. He is warm, excited, and happily self-roasting. He 
 Every personal post should sound like the same person wrote that. Do not reuse its wording. This is the ONLY example — there are no sample posts on purpose. Write each post fresh from the bucket, the register, and the facts.
 
 **Rules**
-- 1–3 sentences. If it needs a fourth, it's a company post.
+- 2–5 sentences. Shorter is fine. If it needs a sixth, it's a company post.
 - First person.
 - One idea per post. No "but also."
 - No lesson at the end. No "grateful," "as a founder," "what I learned," "humbled," "excited to announce."

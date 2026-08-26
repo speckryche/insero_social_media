@@ -387,6 +387,13 @@ async function generateCategoryPosts(
   const bannedWords = parseListSetting(guidance.bannedWords);
   if (bannedWords.length > 0) {
     systemPrompt += `\n\nNever use any of these words or phrases: ${bannedWords.join(", ")}.`;
+  } else {
+    // Nothing to inject means either an empty Settings list or a missing
+    // app_settings.banned_words column. Say so rather than fail silently —
+    // a silent no-op here looks identical to the model ignoring the rule.
+    console.warn(
+      `[generate-batch] no banned words injected for ${category} — the list is empty or app_settings.banned_words is missing`
+    );
   }
 
   if (guidance.contentNotes) {
@@ -408,10 +415,14 @@ async function generateCategoryPosts(
       max_tokens: maxTokens,
       // Thinking stays on — disabling it on Sonnet 5 risks leaked reasoning
       // tags — but low effort keeps it from eating the output budget on what
-      // is really just JSON assembly from an explicit spec. personal_take is
-      // the exception: hitting Voice B's register takes more room to think.
+      // is really just JSON assembly from an explicit spec. personal_take and
+      // humor_speak are the exceptions: hitting Voice B's register, and
+      // landing an actual joke, both take more room to think.
       output_config: {
-        effort: category === "personal_take" ? "medium" : "low",
+        effort:
+          category === "personal_take" || category === "humor_speak"
+            ? "medium"
+            : "low",
       },
       system: systemPrompt,
       messages: [
@@ -459,6 +470,40 @@ async function generateCategoryPosts(
     throw new Error(
       `Expected posts for ${category}, got ${Array.isArray(posts) ? "empty array" : "non-array"}`
     );
+  }
+
+  // Banned words are an instruction, not a guarantee. Check what actually came
+  // back and name anything that slipped through, so a leak shows up in the
+  // logs instead of only in the finished batch.
+  if (bannedWords.length > 0) {
+    const CONTENT_FIELDS = [
+      "linkedin_content",
+      "linkedin_personal_content",
+      "x_content",
+      "facebook_content",
+      "google_content",
+    ] as const;
+
+    posts.forEach((post, i) => {
+      for (const field of CONTENT_FIELDS) {
+        const text = (post as unknown as Record<string, unknown>)[field];
+        if (typeof text !== "string" || !text) continue;
+
+        for (const word of bannedWords) {
+          // Word-boundary match so "delve" doesn't fire on "delved into" —
+          // it should — but "AI" doesn't fire inside "said".
+          const pattern = new RegExp(
+            `\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+            "i"
+          );
+          if (pattern.test(text)) {
+            console.warn(
+              `[generate-batch] BANNED WORD "${word}" in ${category} post ${i + 1} (${field})`
+            );
+          }
+        }
+      }
+    });
   }
 
   // A disabled platform's field was never asked for, so it won't come back.
@@ -682,6 +727,12 @@ export async function POST(request: NextRequest) {
     };
     console.log(
       `[generate-batch] enabled platforms: ${enabledPlatforms.join(", ")}`
+    );
+    console.log(
+      `[generate-batch] banned words loaded: ${parseListSetting(settings.banned_words).length}` +
+        (settings.banned_words === undefined
+          ? " (app_settings.banned_words column is MISSING — run migration 014)"
+          : "")
     );
     const postsByCategory = new Map<ContentCategory, GeneratedPost[]>();
 

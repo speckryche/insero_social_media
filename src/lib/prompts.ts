@@ -125,19 +125,28 @@ A bill or contract line makes a good hook — "Minimum Usage Charge", "Early Ter
 
 CRITICAL: Never a dollar figure or percentage. Never present a scenario as something that happened unless it clearly reads as hypothetical ("Say a 20-person office…").`,
 
-  humor_speak: `Generate 12 "Humor Speak" social media posts.
+  humor_speak: `Generate 12 "Humor Speak" posts. These are pure jokes.
 
 THE BRIEF (from the content skill, verbatim):
-The funny one. A short post that's actually funny and relates to technology, usually AI: what AI is doing this week, the fears around it, the gap between the demo and the office, the robot receptionist that's better than Dave. Free-form (the Telecom-speak format is optional here). Rules of the joke: never mock a customer, a carrier, or a real person; no doom; the joke is on the technology or on us. Warm, not snarky. One joke per post. If it isn't funny, don't post it — write a quiet observation instead.
+Pure jokes. 1–3 sentences. The joke IS the post: no setup paragraph, no explanation, no "but seriously," no lesson, no takeaway. Subject is technology, usually AI: what AI is doing, the fears around it, the gap between the demo and the office, AI vs. the fax machine. Absurd enough that nobody thinks it happened. Rules: never mock a customer, a carrier, or a real person; no doom; the joke is on the technology or on us. Warm, dry, quick. If it isn't funny, don't post it — write a one-line observation instead.
 
-FORMAT: free-form. The Telecom-speak / Human-speak structure is available if a post wants it, but most of these should just be the observation, well told. Short — two to six lines.
+FORMAT: **1-3 sentences. Hard limit.** The joke is the entire post. This overrides the usual company post length — do not write paragraphs here.
+- No setup paragraph. No scene-setting. Open on the joke.
+- No explanation after the punchline. No "but seriously." No lesson. No takeaway line.
+- No CTA, no soft close, no question to the audience.
+- Absurd enough that nobody reads it as something that actually happened.
 
 RULES OF THE JOKE, all mandatory:
 - Never mock a customer, a carrier, or a real person. Carriers are partners.
 - No doom. Nothing about jobs disappearing or the world ending.
 - The joke is on the technology, or on us.
-- Warm, not snarky. One joke per post.
-- If a post isn't actually funny, don't force it — write a quiet observation instead.`,
+- Warm, dry, quick. One joke per post.
+- If a post isn't actually funny, don't force it — write a one-line observation instead.
+
+EXAMPLES OF THE TARGET — these show the length and the shape only. Do not reuse them, and do not reuse their subjects:
+- "We asked an AI to explain our internet bill. It asked for a moment."
+- "An AI can now summarize a 60-minute meeting in 30 seconds. Still working on the version that cancels it."
+- "The hold music is AI-generated now. The wait is still human."`,
 
   personal_take: `Generate 12 "Personal Take" posts for Speck's personal LinkedIn profile.
 
@@ -391,10 +400,16 @@ Also generate image data for posts that will have branded images. Include these 
   // numbered, so a disabled platform leaves no gap and no dangling rule the
   // model might try to satisfy anyway. The two LinkedIn variants are always
   // present — LinkedIn cannot be switched off.
+  // humor_speak is the exception to the company post length: the joke is the
+  // whole post, so the usual 100-200 words would bury it.
+  const isHumorSpeak = category === "humor_speak";
+
   const platformRules: Array<{ field: string; rule: string }> = [
     {
       field: "linkedin_content",
-      rule: `linkedin_content: 100-200 words. Hook in the first line. Short paragraphs (1-2 sentences each) with white space between them. No hashtags. ${linkedinCtaNote} This is for the COMPANY PAGE — use the company voice profile.`,
+      rule: isHumorSpeak
+        ? `linkedin_content: **1-3 sentences. Hard limit.** This overrides the usual company post length — the joke is the entire post. No hook line, no setup, no explanation, no takeaway, no CTA, no hashtags. This is for the COMPANY PAGE — use the company voice profile.`
+        : `linkedin_content: 100-200 words. Hook in the first line. Short paragraphs (1-2 sentences each) with white space between them. No hashtags. ${linkedinCtaNote} This is for the COMPANY PAGE — use the company voice profile.`,
     },
     { field: "linkedin_personal_content", rule: personalVariantRule },
   ];

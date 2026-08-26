@@ -23,12 +23,15 @@ export interface HeadlineItem {
   published_date: string;
 }
 
-// Which feeds each content category is allowed to draw from. The three
-// Telecom-speak categories that translate bills, contracts, and quotes never
-// see headlines — their source material is the paperwork, not the news.
+// Which feeds each content category is allowed to draw from, per the content
+// skill's headline-routing rules.
 export const FEEDS_BY_CATEGORY: Record<string, HeadlineFeed[]> = {
-  tech_speak: ["ai_voice", "ai_tech"],
+  ai_speak: ["ai_voice"],
+  tech_speak: ["ai_tech"],
+  humor_speak: ["ai_tech"],
   personal_take: ["crypto", "ai_tech"],
+  // quote_speak and cost_speak never receive headlines — their material is
+  // the paperwork and the spend, not the news.
 };
 
 export function headlinesForCategory(

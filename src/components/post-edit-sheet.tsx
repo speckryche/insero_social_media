@@ -112,10 +112,11 @@ export function PostEditSheet({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bill_speak">Bill Speak</SelectItem>
-                    <SelectItem value="contract_speak">Contract Speak</SelectItem>
-                    <SelectItem value="quote_speak">Quote Speak</SelectItem>
+                    <SelectItem value="ai_speak">AI Speak</SelectItem>
                     <SelectItem value="tech_speak">Tech Speak</SelectItem>
+                    <SelectItem value="quote_speak">Quote Speak</SelectItem>
+                    <SelectItem value="cost_speak">Cost Speak</SelectItem>
+                    <SelectItem value="humor_speak">Humor Speak</SelectItem>
                     <SelectItem value="personal_take">Personal Take</SelectItem>
                   </SelectContent>
                 </Select>

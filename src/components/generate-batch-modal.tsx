@@ -35,11 +35,12 @@ const MONTHS = [
 
 const PROGRESS_MESSAGES = [
   "Creating batch...",
-  'Generating "Did You Know" posts...',
-  'Generating "Savings Stories" posts...',
-  'Generating "Industry Tips" posts...',
-  'Generating "Myth-Busting" posts...',
-  'Generating "Personal Takes" posts...',
+  'Generating "AI Speak" posts...',
+  'Generating "Tech Speak" posts...',
+  'Generating "Quote Speak" posts...',
+  'Generating "Cost Speak" posts...',
+  'Generating "Humor Speak" posts...',
+  'Generating "Personal Take" posts...',
   "Assigning schedules and images...",
   "Almost done...",
 ];
@@ -48,7 +49,7 @@ type BatchScope = "both" | "company" | "personal";
 
 const SCOPE_OPTIONS: Array<{ value: BatchScope; label: string; hint: string }> = [
   { value: "both", label: "Both", hint: "Company page + Speck's profile" },
-  { value: "company", label: "Company only", hint: "The four Telecom-speak categories" },
+  { value: "company", label: "Company only", hint: "The five company categories" },
   { value: "personal", label: "Personal only", hint: "Personal Take posts only" },
 ];
 
@@ -57,8 +58,8 @@ const DEFAULT_POST_COUNT = 30;
 
 // Test mode ignores the size picker: 2 per included category.
 const SCOPE_TEST_COUNTS: Record<BatchScope, number> = {
-  both: 10,
-  company: 8,
+  both: 12,
+  company: 10,
   personal: 2,
 };
 
@@ -335,8 +336,8 @@ export function GenerateBatchModal() {
                       </div>
                     ))}
                     <p className="text-xs text-gray-400 pt-1">
-                      {pickedIds.length} picked. Used by Tech Speak and Personal
-                      Take only.
+                      {pickedIds.length} picked. Used by AI, Tech, Humor, and
+                      Personal Take only.
                     </p>
                   </div>
                 )}

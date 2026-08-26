@@ -41,30 +41,33 @@ function getSupabase() {
 }
 
 const CATEGORIES: ContentCategory[] = [
-  "bill_speak",
-  "contract_speak",
-  "quote_speak",
+  "ai_speak",
   "tech_speak",
+  "quote_speak",
+  "cost_speak",
+  "humor_speak",
   "personal_take",
 ];
 
 // Share of every batch by category, per the content plan. Sums to 1.0.
 const CATEGORY_MIX: Record<ContentCategory, number> = {
-  bill_speak: 0.20,
-  contract_speak: 0.20,
-  quote_speak: 0.15,
-  tech_speak: 0.20,
-  personal_take: 0.25,
+  ai_speak: 0.30,
+  tech_speak: 0.13,
+  quote_speak: 0.13,
+  cost_speak: 0.13,
+  humor_speak: 0.08,
+  personal_take: 0.23,
 };
 
 // Which categories a batch scope covers.
 type BatchScope = "both" | "company" | "personal";
 
 const COMPANY_CATEGORIES: ContentCategory[] = [
-  "bill_speak",
-  "contract_speak",
-  "quote_speak",
+  "ai_speak",
   "tech_speak",
+  "quote_speak",
+  "cost_speak",
+  "humor_speak",
 ];
 
 function categoriesForScope(scope: BatchScope): ContentCategory[] {
@@ -160,24 +163,15 @@ function assignImageTemplate(
   category: ContentCategory,
   indexInCategory: number
 ): { has_image: boolean; image_template_type: ImageTemplateType | null } {
-  // Base assignment (existing canvas-template rules)
+  // Base canvas template per category, before photo templates are mixed in.
   let base: { has_image: boolean; image_template_type: ImageTemplateType | null };
   switch (category) {
-    case "bill_speak":
-      base = indexInCategory >= 8
-        ? { has_image: false, image_template_type: null }
-        : {
-            has_image: true,
-            image_template_type: indexInCategory % 2 === 0 ? "stat_card" : "did_you_know",
-          };
-      break;
-    case "quote_speak":
-      base = indexInCategory % 2 === 0
-        ? {
-            has_image: true,
-            image_template_type: indexInCategory % 4 === 0 ? "quote_card" : "savings_highlight",
-          }
-        : { has_image: false, image_template_type: null };
+    case "ai_speak":
+      // The priority category — most posts carry an image.
+      base = {
+        has_image: true,
+        image_template_type: indexInCategory % 2 === 0 ? "tip_graphic" : "checklist",
+      };
       break;
     case "tech_speak":
       base = indexInCategory % 2 === 1
@@ -187,13 +181,29 @@ function assignImageTemplate(
           }
         : { has_image: false, image_template_type: null };
       break;
-    case "contract_speak":
+    case "quote_speak":
+      base = indexInCategory % 2 === 0
+        ? {
+            has_image: true,
+            image_template_type: indexInCategory % 4 === 0 ? "quote_card" : "savings_highlight",
+          }
+        : { has_image: false, image_template_type: null };
+      break;
+    case "cost_speak":
+      // No dollar figures allowed in this category, so the stat templates are
+      // deliberately not used — comparisons and checklists carry the idea.
       base = indexInCategory % 2 === 0
         ? {
             has_image: true,
             image_template_type: indexInCategory % 4 === 0 ? "comparison" : "checklist",
           }
         : { has_image: false, image_template_type: null };
+      break;
+    case "humor_speak":
+      base = {
+        has_image: true,
+        image_template_type: indexInCategory % 2 === 0 ? "quote_card" : "tip_graphic",
+      };
       break;
     case "personal_take":
       base = { has_image: false, image_template_type: null };
@@ -223,25 +233,31 @@ function assignImageTemplate(
     return { has_image: true, image_template_type: "tip_graphic" };
   }
 
-  if (category === "bill_speak") {
-    // 35% overlay_right, 15% overlay_left, 25% photo_stat, 25% existing canvas
-    // (alternates stat_card / did_you_know — mirrors the base rule)
+  if (category === "ai_speak") {
+    // 35% overlay_right, 15% overlay_left, 25% photo_tip, 25% existing canvas.
+    // The priority category leans on photo templates so the feed doesn't turn
+    // into a wall of graphics.
     if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
     if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
-    if (rand < 0.75) return { has_image: true, image_template_type: "photo_stat" };
-    return {
-      has_image: true,
-      image_template_type: indexInCategory % 2 === 0 ? "stat_card" : "did_you_know",
-    };
+    if (rand < 0.75) return { has_image: true, image_template_type: "photo_tip" };
+    return base;
   }
 
-  if (category === "contract_speak") {
+  if (category === "cost_speak") {
     // 35% overlay_right, 15% overlay_left, 25% checklist, 25% comparison —
-    // clause breakdowns read best as lists and before/after pairs.
+    // value questions read best as lists and before/after pairs. No stat
+    // templates: this category may not use numbers.
     if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
     if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
     if (rand < 0.75) return { has_image: true, image_template_type: "checklist" };
     return { has_image: true, image_template_type: "comparison" };
+  }
+
+  if (category === "humor_speak") {
+    // A joke lands better on a photo or a quote card than on a chart.
+    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
+    if (rand < 0.55) return { has_image: true, image_template_type: "photo_landscape" };
+    return base;
   }
 
   // Any other category falls through to the base rule.
@@ -678,10 +694,11 @@ export async function POST(request: NextRequest) {
 
     // Test mode template assignments: map category + index-in-category to a specific template
     const TEST_MODE_TEMPLATES: Record<string, ImageTemplateType[]> = {
-      bill_speak: ["stat_card", "did_you_know"],
-      contract_speak: ["checklist", "comparison"],
+      ai_speak: ["tip_graphic", "photo_tip"],
+      tech_speak: ["checklist", "photo_overlay_right"],
       quote_speak: ["savings_highlight", "quote_card"],
-      tech_speak: ["tip_graphic", "photo_tip"],
+      cost_speak: ["comparison", "checklist"],
+      humor_speak: ["quote_card", "tip_graphic"],
       // personal_take gets no LLM image fields, so it only renders correctly
       // on the photo templates the fallback below fills from the post's own
       // copy. Anything else would come out with empty text.

@@ -13,13 +13,16 @@ import {
 } from "lucide-react";
 
 const CATEGORY_LABELS: Record<string, string> = {
+  ai_speak: "AI Speak",
+  tech_speak: "Tech Speak",
+  quote_speak: "Quote Speak",
+  cost_speak: "Cost Speak",
+  humor_speak: "Humor Speak",
+  personal_take: "Personal Take",
+  // Legacy categories — kept so posts from earlier batches still render a
+  // label. Not offered in any picker.
   bill_speak: "Bill Speak",
   contract_speak: "Contract Speak",
-  quote_speak: "Quote Speak",
-  tech_speak: "Tech Speak",
-  personal_take: "Personal Take",
-  // Legacy categories — kept so posts from pre-Telecom-speak batches still
-  // render a label. Not offered in any picker.
   did_you_know: "Did You Know",
   savings_story: "Savings Story",
   industry_tip: "Industry Tip",
@@ -27,12 +30,15 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_STYLES: Record<string, string> = {
-  bill_speak: "bg-sky-100 text-sky-800",
-  contract_speak: "bg-rose-100 text-rose-800",
-  quote_speak: "bg-emerald-100 text-emerald-800",
+  ai_speak: "bg-indigo-100 text-indigo-800",
   tech_speak: "bg-amber-100 text-amber-800",
+  quote_speak: "bg-emerald-100 text-emerald-800",
+  cost_speak: "bg-rose-100 text-rose-800",
+  humor_speak: "bg-orange-100 text-orange-800",
   personal_take: "bg-violet-100 text-violet-800",
   // Legacy categories — see note above.
+  bill_speak: "bg-sky-100 text-sky-800",
+  contract_speak: "bg-rose-100 text-rose-800",
   did_you_know: "bg-sky-100 text-sky-800",
   savings_story: "bg-emerald-100 text-emerald-800",
   industry_tip: "bg-amber-100 text-amber-800",

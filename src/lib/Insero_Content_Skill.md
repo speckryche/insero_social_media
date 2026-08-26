@@ -30,7 +30,7 @@ Every post is written in exactly one of these. Never blend them.
 - Length: 100–220 words
 - Perspective: always **we / our / Insero**. Never "I". Never name Speck.
 - Structure: hook line → 2–4 short sentences or a tight bullet list → optional soft close
-- Hashtags: 2–3, at the end, relevant (e.g. #SmallBusiness #VoIP #BusinessInternet)
+- Hashtags: none. The post text names the topic plainly; that's what LinkedIn reads now.
 - CTA: about 30% of posts end with a soft invite to a free service review. Link to **www.insero.cloud**. (Switch to www.insero.cloud/analysis once that URL is live.) The other 70% have no CTA at all.
 - Tone: warm, direct, confident. Like a knowledgeable friend, not a vendor.
 
@@ -59,7 +59,7 @@ Every personal post should sound like the same person wrote that. Do not reuse i
 - One idea per post. No "but also."
 - No lesson at the end. No "grateful," "as a founder," "what I learned," "humbled," "excited to announce."
 - Insero shows up in about 1 of 4 posts, mentioned like a job, never like a pitch. Never a link.
-- **No hashtags. No emojis. No CTAs. No links.** Ending on a question to the reader is fine and Speck likes it — but only when he'd actually want the answer.
+- **No hashtags (either voice). No emojis. No CTAs. No links.** Ending on a question to the reader is fine and Speck likes it — but only when he'd actually want the answer.
 - Text only. Nothing that requires Speck's face or a photo of him.
 
 **Five buckets — rotate evenly across a month**
@@ -174,16 +174,23 @@ Human-speak: <plain version, with a smile if there's room>
 - Telecom-speak: "Legacy copper facilities are being retired." Human-speak: Your old phone lines are going away. The fax machine needs a new plan.
 
 **Categories the app requests**
-- **bill_speak** — a line from a bill or invoice, translated
-- **contract_speak** — a contract or renewal clause, translated
-- **quote_speak** — a line from a quote or proposal, translated
-- **tech_speak** — a technical term, acronym, or feature name, translated (SIP, UCaaS, POTS replacement, SD-WAN, CCaaS, symmetric, etc.). **About one third of tech_speak posts should be AI-in-voice features** from Section 4: AI receptionist, call summaries, agent assist, sentiment scoring, live translation, and so on.
+
+- **ai_speak** — PRIORITY. AI features in business voice: AI receptionist, call summaries, meeting recaps, agent assist, sentiment, live translation. Key on RingCentral, Zoom, Dialpad, Nextiva. Use the Telecom-speak → Human-speak format on the feature name or the vendor's marketing line, then say what it does for a real office. This is where headline items about AI in voice land. Never claim a feature exists on a specific plan or at a specific price. Honest about limits: great for simple repetitive calls, still hand the hard ones to a human. Insero's role: figure out which platform fits, source it, help with setup.
+- **tech_speak** — a technical term, acronym, or piece of jargon, translated (SIP, UCaaS, SD-WAN, symmetrical, POTS replacement, "not lit", site survey…). Bill and contract jargon belongs here too when it's about understanding, not money. General AI/tech headlines may land here.
+- **quote_speak** — what it's like to get quotes through Insero. Emphasize: many options and ideas instead of one carrier's one answer, real negotiation on pricing and terms, and zero cost to the customer because providers pay Insero. Can translate a quote line (MRC/NRC, promotional rate, term) as the hook. Never a savings number or percentage. "Often better pricing than going direct" is the ceiling.
+- **cost_speak** — getting the best value from a company's technology spend. Not "savings." Think: paying for lines nobody uses, auto-renewals that quietly reset, paying enterprise prices for a small office, redundancy that costs less than one outage, right-sizing bandwidth. Translate a bill or contract line as the hook when useful. Never a dollar figure or percentage. Never presented as a real customer event unless clearly hypothetical.
+- **humor_speak** — the funny one. A short post that's actually funny and relates to technology, usually AI: what AI is doing this week, the fears around it, the gap between the demo and the office, the robot receptionist that's better than Dave. Free-form (the Telecom-speak format is optional here). Rules of the joke: never mock a customer, a carrier, or a real person; no doom; the joke is on the technology or on us. Warm, not snarky. One joke per post. If it isn't funny, don't post it — write a quiet observation instead.
 - **personal_take** — Voice B only. Rotate evenly across the five Voice B buckets. Not required to touch telecom.
 
-**Mix (~60 posts/month)**
-- bill_speak 20% · contract_speak 20% · quote_speak 15% · tech_speak 20% · personal_take 25%
+**Mix (30 posts)**
+- ai_speak 9 · tech_speak 4 · quote_speak 4 · cost_speak 4 · humor_speak 2 · personal_take 7. Scale proportionally for other sizes.
 
-Every post also generates X, Facebook, and Google versions. Same rules as Voice A. LinkedIn is the priority.
+**Headline routing**
+- ai_voice headlines → ai_speak. ai_tech headlines → tech_speak, humor_speak, personal_take. crypto headlines → personal_take only. quote_speak and cost_speak never use headlines.
+
+Every post also generates X, Facebook, and Google versions when those platforms are enabled. Same rules as Voice A. LinkedIn is the priority.
+
+---
 
 ## 6. Verified statistics
 

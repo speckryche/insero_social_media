@@ -59,10 +59,11 @@ SHARED RULES FOR ALL POSTS:
 You must respond with valid JSON only. No markdown, no code fences, no extra text.`;
 
 export type ContentCategory =
-  | "bill_speak"
-  | "contract_speak"
-  | "quote_speak"
+  | "ai_speak"
   | "tech_speak"
+  | "quote_speak"
+  | "cost_speak"
+  | "humor_speak"
   | "personal_take";
 
 // Shared structure for the four company categories. Every post takes one piece
@@ -80,93 +81,63 @@ On LinkedIn and Facebook the explicit "Telecom-speak:" / "Human-speak:" framing 
 Rotate the jargon across the batch. Never translate the same term twice.`;
 
 export const CATEGORY_PROMPTS: Record<ContentCategory, string> = {
-  bill_speak: `Generate 12 "Bill Speak" social media posts.
+  ai_speak: `Generate 12 "AI Speak" social media posts.
 
-Each post takes one line item off a business telecom bill and translates it into plain English.
-
-JARGON SOURCE — BILL LINE ITEMS. Draw from charges that actually appear on invoices:
-- "Carrier Cost Recovery Fee"
-- "Federal Universal Service Fund (FUSF)"
-- "Regulatory Recovery Charge"
-- "Access Recovery Charge"
-- "E911 Surcharge"
-- "Property Tax Allotment"
-- "Administrative Expense Fee"
-- "Minimum Usage Charge" / shortfall billing
-- "Directory Assistance"
-- Per-line feature charges for things already bundled in the platform
+THE BRIEF (from the content skill, verbatim):
+PRIORITY. AI features in business voice: AI receptionist, call summaries, meeting recaps, agent assist, sentiment, live translation. Key on RingCentral, Zoom, Dialpad, Nextiva. Use the Telecom-speak → Human-speak format on the feature name or the vendor's marketing line, then say what it does for a real office. This is where headline items about AI in voice land. Never claim a feature exists on a specific plan or at a specific price. Honest about limits: great for simple repetitive calls, still hand the hard ones to a human. Insero's role: figure out which platform fits, source it, help with setup.
 
 ${TELECOM_SPEAK_FORMAT}
 
-Speck ran a CLEC for nearly 20 years — he knows which of these are genuine pass-through costs and which are margin wearing a government-sounding name. Let that show without turning it into an accusation.
+The jargon source here is the feature name or the vendor's marketing line — "AI-powered conversational IVR with intelligent call routing", "real-time sentiment scoring", "automated post-call summarization". Translate it into what actually happens in an office on a Tuesday.
 
-CRITICAL: Do not invent specific dollar amounts or percentages. "A couple of dollars a line" or "small enough to ignore until you multiply it by 40 lines" is fine. "$4,200 a year" is not.`,
-
-  contract_speak: `Generate 12 "Contract Speak" social media posts.
-
-Each post takes one clause out of a carrier contract and translates it into plain English.
-
-JARGON SOURCE — CONTRACT CLAUSES. Draw from language that actually appears in carrier agreements:
-- "Auto-renewal" / "evergreen" clauses and the narrow cancellation window
-- "Early Termination Liability (ETL)"
-- "Minimum Annual Revenue Commitment (MARC)"
-- "Service Level Agreement" and what the credits are actually worth
-- "Rate stabilization" / rate-lock language that only locks one direction
-- "Term commencement" — when the clock actually starts
-- "Portability" and what happens to your numbers if you leave
-- "Force majeure" and outage credit exclusions
-- Ramp schedules and stepped pricing
-
-${TELECOM_SPEAK_FORMAT}
-
-The useful move here is telling the reader exactly where to look in their own paperwork and what to do about it before renewal.
-
-CRITICAL: Do not fabricate specific contracts, customers, or conversations. Frame as what these clauses commonly say — "most agreements", "the standard language here is", "nine times out of ten this reads".`,
-
-  quote_speak: `Generate 12 "Quote Speak" social media posts.
-
-Each post takes one line off a carrier quote or proposal and translates it into plain English.
-
-JARGON SOURCE — QUOTE AND PROPOSAL LINES. Draw from what shows up on the paper before you sign:
-- "Promotional rate" and what year two looks like
-- "MRC" and "NRC" (monthly vs. non-recurring charges)
-- "Term: 36 months" and why the term drives the price
-- "Subject to site survey"
-- "Building is not lit" / "on-net vs. off-net"
-- "Estimated install: 90 days"
-- "Special construction charges"
-- "Best effort" vs. "dedicated" bandwidth on the same quote
-- "Plus taxes and fees" — the line that moves the real number
-- Quantity assumptions buried in the line items
-
-${TELECOM_SPEAK_FORMAT}
-
-The point of this category is that a quote is a sales document, not a price. Teach the reader which line changes the total.
-
-CRITICAL: Do not invent specific quoted prices, percentages, or install dates. Use relative language — "often jumps meaningfully", "the promo number is rarely the number you pay in year two".`,
+CRITICAL: Never claim a feature exists on a specific plan or at a specific price. Be honest about limits in a fair share of posts — these are great for simple repetitive calls, and the hard ones should still reach a human.`,
 
   tech_speak: `Generate 12 "Tech Speak" social media posts.
 
-Each post takes one technical term a vendor used in a meeting and translates it into plain English.
-
-JARGON SOURCE — TECHNICAL TERMS. Draw from what gets said on vendor calls:
-- "SIP trunk"
-- "UCaaS" / "CCaaS"
-- "SD-WAN"
-- "Symmetrical vs. asymmetrical bandwidth"
-- "Dedicated vs. shared / contended"
-- "Failover" and "diverse path"
-- "Latency, jitter, packet loss" — which one actually breaks a phone call
-- "Hosted PBX" vs. "on-prem"
-- "Colocation" and "cross-connect"
-- "MPLS" and why it keeps coming up
-- "Number porting"
+THE BRIEF (from the content skill, verbatim):
+A technical term, acronym, or piece of jargon, translated (SIP, UCaaS, SD-WAN, symmetrical, POTS replacement, "not lit", site survey…). Bill and contract jargon belongs here too when it's about understanding, not money. General AI/tech headlines may land here.
 
 ${TELECOM_SPEAK_FORMAT}
 
-Tone is a knowledgeable friend, never a lecture. The reader should finish the post able to use the term correctly in their next vendor call — and know the one question it lets them ask.
+Bill and contract language belongs in this category when the post is about understanding the term — what "not lit" means, what a site survey actually involves. When the post is about what something costs a business, that is cost_speak instead.
 
 CRITICAL: Do not invent benchmark numbers or specifications (throughput figures, millisecond thresholds, uptime percentages). Describe what the term means and why it matters without fabricating specs.`,
+
+  quote_speak: `Generate 12 "Quote Speak" social media posts.
+
+THE BRIEF (from the content skill, verbatim):
+What it's like to get quotes through Insero. Emphasize: many options and ideas instead of one carrier's one answer, real negotiation on pricing and terms, and zero cost to the customer because providers pay Insero. Can translate a quote line (MRC/NRC, promotional rate, term) as the hook. Never a savings number or percentage. "Often better pricing than going direct" is the ceiling.
+
+${TELECOM_SPEAK_FORMAT}
+
+The Telecom-speak hook is optional-but-preferred here: open on a real quote line — "MRC", "NRC", "promotional rate", "Term: 36 months" — then move to what working through Insero is actually like.
+
+CRITICAL: Never a savings number or percentage. "Often better pricing than going direct" is the ceiling. Do not fabricate specific quotes, customers, or conversations.`,
+
+  cost_speak: `Generate 12 "Cost Speak" social media posts.
+
+THE BRIEF (from the content skill, verbatim):
+Getting the best value from a company's technology spend. Not "savings." Think: paying for lines nobody uses, auto-renewals that quietly reset, paying enterprise prices for a small office, redundancy that costs less than one outage, right-sizing bandwidth. Translate a bill or contract line as the hook when useful. Never a dollar figure or percentage. Never presented as a real customer event unless clearly hypothetical.
+
+${TELECOM_SPEAK_FORMAT}
+
+A bill or contract line makes a good hook — "Minimum Usage Charge", "Early Termination Liability", "Auto-renewal ensures uninterrupted service continuity" — but the post is about value, not about the jargon for its own sake.
+
+CRITICAL: Never a dollar figure or percentage. Never present a scenario as something that happened unless it clearly reads as hypothetical ("Say a 20-person office…").`,
+
+  humor_speak: `Generate 12 "Humor Speak" social media posts.
+
+THE BRIEF (from the content skill, verbatim):
+The funny one. A short post that's actually funny and relates to technology, usually AI: what AI is doing this week, the fears around it, the gap between the demo and the office, the robot receptionist that's better than Dave. Free-form (the Telecom-speak format is optional here). Rules of the joke: never mock a customer, a carrier, or a real person; no doom; the joke is on the technology or on us. Warm, not snarky. One joke per post. If it isn't funny, don't post it — write a quiet observation instead.
+
+FORMAT: free-form. The Telecom-speak / Human-speak structure is available if a post wants it, but most of these should just be the observation, well told. Short — two to six lines.
+
+RULES OF THE JOKE, all mandatory:
+- Never mock a customer, a carrier, or a real person. Carriers are partners.
+- No doom. Nothing about jobs disappearing or the world ending.
+- The joke is on the technology, or on us.
+- Warm, not snarky. One joke per post.
+- If a post isn't actually funny, don't force it — write a quiet observation instead.`,
 
   personal_take: `Generate 12 "Personal Take" posts for Speck's personal LinkedIn profile.
 
@@ -249,9 +220,15 @@ function buildBucketAssignments(postCount: number): string {
   return lines.join("\n");
 }
 
-export type ImageCategory = "bill_speak" | "contract_speak" | "quote_speak" | "tech_speak";
+export type ImageCategory = "ai_speak" | "tech_speak" | "quote_speak" | "cost_speak" | "humor_speak";
 
-const IMAGE_CATEGORIES: ContentCategory[] = ["bill_speak", "contract_speak", "quote_speak", "tech_speak"];
+const IMAGE_CATEGORIES: ContentCategory[] = [
+  "ai_speak",
+  "tech_speak",
+  "quote_speak",
+  "cost_speak",
+  "humor_speak",
+];
 
 // Settings textareas hold one entry per line. Blank lines and stray spacing
 // are the user's, not the model's problem.

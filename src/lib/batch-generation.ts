@@ -1,0 +1,572 @@
+// Batch generation internals, extracted from the generate-batch route so the
+// add-posts route can reuse the exact same path — same prompts, same banned
+// words and Speck-isms, same headline injection, same image assignment.
+// Next forbids exporting helpers from a route file, hence this module.
+
+import { readFileSync } from "fs";
+import { join } from "path";
+import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@supabase/supabase-js";
+import {
+  buildCategoryPrompt,
+  parseListSetting,
+  ContentCategory,
+} from "@/lib/prompts";
+import {
+  type Platform,
+} from "@/lib/platforms";
+import {
+  stripCodeFences,
+  escapeRawControlCharsInStrings,
+} from "@/lib/json-repair";
+import {
+  type HeadlineItem,
+} from "@/lib/headlines";
+
+// Read content skill file as the single source of truth for post generation
+const CONTENT_SKILL = readFileSync(
+  join(process.cwd(), "src/lib/Insero_Content_Skill.md"),
+  "utf-8"
+);
+
+export const SYSTEM_PROMPT = `${CONTENT_SKILL}
+
+You must respond with valid JSON only. No markdown, no code fences, no extra text.`;
+
+// Use service role for server-side operations
+export function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
+export const CATEGORIES: ContentCategory[] = [
+  "ai_speak",
+  "tech_speak",
+  "quote_speak",
+  "cost_speak",
+  "pots_speak",
+  "personal_take",
+];
+
+// Share of every batch by category, per the content plan. Sums to 1.0.
+export const CATEGORY_MIX: Record<ContentCategory, number> = {
+  ai_speak: 0.27,
+  tech_speak: 0.13,
+  quote_speak: 0.13,
+  cost_speak: 0.13,
+  pots_speak: 0.10,
+  personal_take: 0.23,
+};
+
+// Which categories a batch scope covers.
+export type BatchScope = "both" | "company" | "personal";
+
+export const COMPANY_CATEGORIES: ContentCategory[] = [
+  "ai_speak",
+  "tech_speak",
+  "quote_speak",
+  "cost_speak",
+  "pots_speak",
+];
+
+export function categoriesForScope(scope: BatchScope): ContentCategory[] {
+  if (scope === "company") return COMPANY_CATEGORIES;
+  if (scope === "personal") return ["personal_take"];
+  return CATEGORIES;
+}
+
+// Batch sizes offered in the Generate dialog.
+export const POST_COUNT_PRESETS = [10, 20, 30, 40, 50, 60];
+export const DEFAULT_POST_COUNT = 30;
+
+// The chosen size is the exact number of posts for whatever scope is picked:
+// "Personal only" at 30 means 30 personal posts, not 30 * the personal share.
+// The scope decides which categories are in play; allocateByMix then splits
+// the full count across just those, renormalizing their proportions.
+//
+// The only thing that can shorten a batch is the calendar — a 28-day month
+// offers 56 slots, so a 60-post batch there becomes 56.
+export function totalPostsForBatch(daysInMonth: number, postCount: number): number {
+  return Math.min(postCount, daysInMonth * 2);
+}
+
+// Largest-remainder apportionment, so the per-category counts always sum to
+// exactly totalPosts no matter how many days the month has. Weights are
+// renormalized over the included categories, which keeps the relative
+// CATEGORY_MIX proportions intact when a scope excludes some of them.
+export function allocateByMix(
+  totalPosts: number,
+  categories: ContentCategory[] = CATEGORIES
+): Map<ContentCategory, number> {
+  const weightSum = categories.reduce(
+    (sum, category) => sum + CATEGORY_MIX[category],
+    0
+  );
+
+  const exact = categories.map((category) => ({
+    category,
+    value: (totalPosts * CATEGORY_MIX[category]) / weightSum,
+  }));
+
+  const counts = new Map<ContentCategory, number>(
+    exact.map((e) => [e.category, Math.floor(e.value)])
+  );
+
+  let assigned = Array.from(counts.values()).reduce((a, b) => a + b, 0);
+  const byRemainder = [...exact].sort(
+    (a, b) => (b.value - Math.floor(b.value)) - (a.value - Math.floor(a.value))
+  );
+
+  let i = 0;
+  while (assigned < totalPosts) {
+    const { category } = byRemainder[i % byRemainder.length];
+    counts.set(category, counts.get(category)! + 1);
+    assigned++;
+    i++;
+  }
+
+  return counts;
+}
+
+export type ImageTemplateType =
+  | "stat_card"
+  | "quote_card"
+  | "tip_graphic"
+  | "comparison"
+  | "savings_highlight"
+  | "myth_buster"
+  | "did_you_know"
+  | "checklist"
+  | "photo_landscape"
+  | "photo_tip"
+  | "photo_stat"
+  | "photo_quote"
+  | "photo_overlay_right"
+  | "photo_overlay_left";
+
+export interface GeneratedPost {
+  linkedin_content: string;
+  linkedin_personal_content: string;
+  x_content: string;
+  facebook_content: string;
+  google_content: string;
+  image_headline?: string;
+  image_body?: string;
+  image_stat_number?: string;
+  image_stat_label?: string;
+  // 1-based index into the headlines shown to this category, or null.
+  headline_index?: number | null;
+}
+
+export function assignImageTemplate(
+  category: ContentCategory,
+  indexInCategory: number
+): { has_image: boolean; image_template_type: ImageTemplateType | null } {
+  // Base canvas template per category, before photo templates are mixed in.
+  let base: { has_image: boolean; image_template_type: ImageTemplateType | null };
+  switch (category) {
+    case "ai_speak":
+      // The priority category — most posts carry an image.
+      base = {
+        has_image: true,
+        image_template_type: indexInCategory % 2 === 0 ? "tip_graphic" : "checklist",
+      };
+      break;
+    case "tech_speak":
+      base = indexInCategory % 2 === 1
+        ? {
+            has_image: true,
+            image_template_type: indexInCategory % 4 === 1 ? "tip_graphic" : "checklist",
+          }
+        : { has_image: false, image_template_type: null };
+      break;
+    case "quote_speak":
+      base = indexInCategory % 2 === 0
+        ? {
+            has_image: true,
+            image_template_type: indexInCategory % 4 === 0 ? "quote_card" : "savings_highlight",
+          }
+        : { has_image: false, image_template_type: null };
+      break;
+    case "cost_speak":
+      // No dollar figures allowed in this category, so the stat templates are
+      // deliberately not used — comparisons and checklists carry the idea.
+      base = indexInCategory % 2 === 0
+        ? {
+            has_image: true,
+            image_template_type: indexInCategory % 4 === 0 ? "comparison" : "checklist",
+          }
+        : { has_image: false, image_template_type: null };
+      break;
+    case "pots_speak":
+      // A running series about what to check and what replaces what — lists
+      // and tip cards carry it better than stat or quote templates.
+      base = {
+        has_image: true,
+        image_template_type: indexInCategory % 2 === 0 ? "checklist" : "tip_graphic",
+      };
+      break;
+    case "personal_take":
+      base = { has_image: false, image_template_type: null };
+      break;
+    default:
+      base = { has_image: false, image_template_type: null };
+  }
+
+  // Photo template injection — give the feed a natural mix of overlay,
+  // photo, and graphic templates. Distribution per category from the brand
+  // brief. photo_overlay_* templates dominate eligible categories now.
+  const rand = Math.random();
+
+  if (category === "quote_speak" || category === "personal_take") {
+    // 40% overlay_right, 20% overlay_left, 20% photo_landscape, 20% base
+    if (rand < 0.40) return { has_image: true, image_template_type: "photo_overlay_right" };
+    if (rand < 0.60) return { has_image: true, image_template_type: "photo_overlay_left" };
+    if (rand < 0.80) return { has_image: true, image_template_type: "photo_landscape" };
+    return base;
+  }
+
+  if (category === "tech_speak") {
+    // 35% overlay_right, 15% overlay_left, 25% photo_tip, 25% tip_graphic
+    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
+    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
+    if (rand < 0.75) return { has_image: true, image_template_type: "photo_tip" };
+    return { has_image: true, image_template_type: "tip_graphic" };
+  }
+
+  if (category === "ai_speak") {
+    // 35% overlay_right, 15% overlay_left, 25% photo_tip, 25% existing canvas.
+    // The priority category leans on photo templates so the feed doesn't turn
+    // into a wall of graphics.
+    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
+    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
+    if (rand < 0.75) return { has_image: true, image_template_type: "photo_tip" };
+    return base;
+  }
+
+  if (category === "cost_speak") {
+    // 35% overlay_right, 15% overlay_left, 25% checklist, 25% comparison —
+    // value questions read best as lists and before/after pairs. No stat
+    // templates: this category may not use numbers.
+    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
+    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
+    if (rand < 0.75) return { has_image: true, image_template_type: "checklist" };
+    return { has_image: true, image_template_type: "comparison" };
+  }
+
+  if (category === "pots_speak") {
+    // 35% overlay_right, 15% overlay_left, rest on the checklist / tip_graphic
+    // base — copper posts are practical, so the list templates do the work.
+    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
+    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
+    return base;
+  }
+
+  // Any other category falls through to the base rule.
+  return base;
+}
+
+export function isWeekend(date: Date): boolean {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
+export interface AppSettings {
+  weekday_morning_time: string;
+  weekday_afternoon_time: string;
+  weekend_morning_time: string;
+  weekend_afternoon_time: string;
+}
+
+export interface ScheduleSlot {
+  scheduled_date: string;
+  time_slot: "morning" | "afternoon";
+  scheduled_time_1: string;
+  scheduled_time_2: string;
+}
+
+// Every slot the month offers — morning and afternoon on every day, in order.
+export function buildAllSlots(
+  month: number,
+  year: number,
+  settings: AppSettings
+): ScheduleSlot[] {
+  const slots: ScheduleSlot[] = [];
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month - 1, day);
+    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const weekend = isWeekend(date);
+
+    const morningTime = weekend
+      ? settings.weekend_morning_time
+      : settings.weekday_morning_time;
+    const afternoonTime = weekend
+      ? settings.weekend_afternoon_time
+      : settings.weekday_afternoon_time;
+
+    slots.push({
+      scheduled_date: dateStr,
+      time_slot: "morning",
+      scheduled_time_1: morningTime,
+      scheduled_time_2: afternoonTime,
+    });
+    slots.push({
+      scheduled_date: dateStr,
+      time_slot: "afternoon",
+      scheduled_time_1: morningTime,
+      scheduled_time_2: afternoonTime,
+    });
+  }
+
+  return slots;
+}
+
+// Picks `wanted` slots at an even stride across the list, rather than taking
+// the first N — front-loading would cram a short batch into the first half of
+// the month.
+export function selectEvenly<T>(slots: T[], wanted: number): T[] {
+  const take = Math.min(wanted, slots.length);
+  const picked: T[] = [];
+  for (let i = 0; i < take; i++) {
+    picked.push(slots[Math.floor((i * slots.length) / take)]);
+  }
+  return picked;
+}
+
+// A slot's identity, for working out which are already taken.
+export function slotKey(slot: {
+  scheduled_date: string;
+  time_slot: string;
+}): string {
+  return `${slot.scheduled_date}|${slot.time_slot}`;
+}
+
+export function buildSchedule(
+  month: number,
+  year: number,
+  settings: AppSettings,
+  maxPosts: number = 60
+): Array<ScheduleSlot & { post_number: number }> {
+  return selectEvenly(buildAllSlots(month, year, settings), maxPosts).map(
+    (slot, i) => ({ ...slot, post_number: i + 1 })
+  );
+}
+
+export function interleaveCategories(
+  postsByCategory: Map<ContentCategory, GeneratedPost[]>
+): Array<{ category: ContentCategory; post: GeneratedPost; indexInCategory: number }> {
+  const result: Array<{
+    category: ContentCategory;
+    post: GeneratedPost;
+    indexInCategory: number;
+  }> = [];
+
+  // Interleave: cycle through categories so content is varied day to day
+  const maxPerCategory = Math.max(...Array.from(postsByCategory.values()).map(p => p.length));
+  for (let i = 0; i < maxPerCategory; i++) {
+    for (const category of CATEGORIES) {
+      const posts = postsByCategory.get(category);
+      if (posts && posts[i]) {
+        result.push({ category, post: posts[i], indexInCategory: i });
+      }
+    }
+  }
+
+  return result;
+}
+
+
+
+// The editable lists from app_settings, plus the free-text notes. All three
+// are stored as plain text and read at generation time.
+export interface GenerationGuidance {
+  contentNotes?: string;
+  bannedWords?: string;
+  speckIsms?: string;
+  styleSamples?: string;
+  enabledPlatforms?: Platform[];
+  headlines?: HeadlineItem[];
+}
+
+export async function generateCategoryPosts(
+  anthropic: Anthropic,
+  category: ContentCategory,
+  postCount: number = 12,
+  guidance: GenerationGuidance = {}
+): Promise<GeneratedPost[]> {
+  let systemPrompt = SYSTEM_PROMPT;
+
+  // Banned words apply to every category, so they ride the system prompt.
+  const bannedWords = parseListSetting(guidance.bannedWords);
+  if (bannedWords.length > 0) {
+    systemPrompt += `\n\nNever use any of these words or phrases: ${bannedWords.join(", ")}.`;
+  } else {
+    // Nothing to inject means either an empty Settings list or a missing
+    // app_settings.banned_words column. Say so rather than fail silently —
+    // a silent no-op here looks identical to the model ignoring the rule.
+    console.warn(
+      `[generate-batch] no banned words injected for ${category} — the list is empty or app_settings.banned_words is missing`
+    );
+  }
+
+  if (guidance.contentNotes) {
+    systemPrompt += `\n\nADDITIONAL GUIDANCE FROM THE USER:\n${guidance.contentNotes}`;
+  }
+
+  // Test-mode batches ask for 2 posts per category; full batches ask for many
+  // more. The ceiling has to cover thinking tokens as well as the JSON —
+  // Sonnet 5 thinks by default, and on a 2-post category that reasoning alone
+  // ran to ~2800 tokens, over half the old 8000 budget.
+  const maxTokens = postCount <= 3 ? 16000 : 32000;
+
+  // Streamed so the larger ceiling can't trip the SDK's HTTP timeout on a
+  // long full-batch response. finalMessage() gives back the same Message
+  // shape messages.create() returned, so stop_reason and content still apply.
+  const message = await anthropic.messages
+    .stream({
+      model: "claude-sonnet-5",
+      max_tokens: maxTokens,
+      // Thinking stays on — disabling it on Sonnet 5 risks leaked reasoning
+      // tags — but low effort keeps it from eating the output budget on what
+      // is really just JSON assembly from an explicit spec. personal_take is
+      // the exception: hitting Voice B's register takes more room to think.
+      output_config: {
+        effort: category === "personal_take" ? "medium" : "low",
+      },
+      system: systemPrompt,
+      messages: [
+        {
+          role: "user",
+          content: buildCategoryPrompt(category, postCount, {
+            speckIsms: guidance.speckIsms,
+            styleSamples: guidance.styleSamples,
+            enabledPlatforms: guidance.enabledPlatforms,
+            headlines: guidance.headlines,
+          }),
+        },
+      ],
+    })
+    .finalMessage();
+
+  // A truncated response yields invalid JSON. Say that plainly rather than
+  // letting it surface as an opaque parse error.
+  if (message.stop_reason === "max_tokens") {
+    throw new Error(
+      `Response for ${category} was cut off at the ${maxTokens} token limit (stop_reason: max_tokens) while generating ${postCount} posts. The JSON is incomplete — retry with fewer posts per category or a higher max_tokens.`
+    );
+  }
+
+  const textBlock = message.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error(`No text response for category: ${category}`);
+  }
+
+  const jsonText = escapeRawControlCharsInStrings(
+    stripCodeFences(textBlock.text)
+  );
+
+  let posts: GeneratedPost[];
+  try {
+    posts = JSON.parse(jsonText);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Could not parse the JSON response for ${category} (${reason}). stop_reason was "${message.stop_reason}".`
+    );
+  }
+
+  if (!Array.isArray(posts) || posts.length === 0) {
+    throw new Error(
+      `Expected posts for ${category}, got ${Array.isArray(posts) ? "empty array" : "non-array"}`
+    );
+  }
+
+  // Banned words are an instruction, not a guarantee. Check what actually came
+  // back and name anything that slipped through, so a leak shows up in the
+  // logs instead of only in the finished batch.
+  if (bannedWords.length > 0) {
+    const CONTENT_FIELDS = [
+      "linkedin_content",
+      "linkedin_personal_content",
+      "x_content",
+      "facebook_content",
+      "google_content",
+    ] as const;
+
+    posts.forEach((post, i) => {
+      for (const field of CONTENT_FIELDS) {
+        const text = (post as unknown as Record<string, unknown>)[field];
+        if (typeof text !== "string" || !text) continue;
+
+        for (const word of bannedWords) {
+          // Word-boundary match so "delve" doesn't fire on "delved into" —
+          // it should — but "AI" doesn't fire inside "said".
+          const pattern = new RegExp(
+            `\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+            "i"
+          );
+          if (pattern.test(text)) {
+            console.warn(
+              `[generate-batch] BANNED WORD "${word}" in ${category} post ${i + 1} (${field})`
+            );
+          }
+        }
+      }
+    });
+  }
+
+  // A disabled platform's field was never asked for, so it won't come back.
+  // Normalize every content field to a string so nothing downstream has to
+  // care which platforms were switched on when the batch was generated.
+  return posts.map((post) => ({
+    ...post,
+    linkedin_content: post.linkedin_content ?? "",
+    linkedin_personal_content: post.linkedin_personal_content ?? "",
+    x_content: post.x_content ?? "",
+    facebook_content: post.facebook_content ?? "",
+    google_content: post.google_content ?? "",
+    headline_index:
+      typeof post.headline_index === "number" ? post.headline_index : null,
+  }));
+}
+
+export async function generateImagesForPost(
+  postId: string,
+  imageTemplateType: string,
+  imageData: {
+    headline: string;
+    bodyText: string;
+    statNumber?: string;
+    statLabel?: string;
+    category?: string;
+  },
+  baseUrl: string
+) {
+  const platforms = ["linkedin", "x", "facebook", "google", "linkedin_personal"];
+
+  for (const platform of platforms) {
+    try {
+      await fetch(`${baseUrl}/api/generate-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postId,
+          templateType: imageTemplateType,
+          headline: imageData.headline,
+          bodyText: imageData.bodyText,
+          statNumber: imageData.statNumber,
+          statLabel: imageData.statLabel,
+          category: imageData.category,
+          platform,
+        }),
+      });
+    } catch (err) {
+      console.error(`Image generation failed for post ${postId}, platform ${platform}:`, err);
+    }
+  }
+}
+

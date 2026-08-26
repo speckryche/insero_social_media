@@ -51,6 +51,7 @@ import {
   Sparkles,
   BookmarkPlus,
   ExternalLink,
+  Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -58,6 +59,7 @@ import { Switch } from "@/components/ui/switch";
 import { PostEditSheet } from "@/components/post-edit-sheet";
 import { PostPreviewModal } from "@/components/post-preview-modal";
 import { LearnFromEditsDialog } from "@/components/learn-from-edits-dialog";
+import { AddPostsDialog } from "@/components/add-posts-dialog";
 import {
   BATCH_SCOPE_LABELS,
   BATCH_SCOPE_STYLES,
@@ -275,6 +277,7 @@ export function BatchReview({
   const [collapsedPostIds, setCollapsedPostIds] = useState<Set<string>>(new Set());
   const [learningOpen, setLearningOpen] = useState(false);
   const [savedSamples, setSavedSamples] = useState<number | null>(null);
+  const [addingPosts, setAddingPosts] = useState(false);
 
   function toggleCollapsed(postId: string) {
     setCollapsedPostIds((prev) => {
@@ -742,6 +745,16 @@ export function BatchReview({
           {/* Reads the batch's edits and proposes Settings additions. Never
               applies anything on its own — every proposal is accepted or
               dismissed by hand in the dialog. */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAddingPosts(true)}
+            disabled={loadingAction !== null}
+          >
+            <Plus className="h-4 w-4 mr-1.5 text-blue-600" />
+            Add posts
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -1541,6 +1554,17 @@ export function BatchReview({
         <LearnFromEditsDialog
           batchId={batch.id}
           onClose={() => setLearningOpen(false)}
+        />
+      )}
+
+      {addingPosts && (
+        <AddPostsDialog
+          batchId={batch.id}
+          scope={batch.scope}
+          onClose={() => setAddingPosts(false)}
+          // Pull the batch and its posts fresh so the new rows appear in the
+          // list, in schedule order, without a manual reload.
+          onAdded={() => router.refresh()}
         />
       )}
     </div>

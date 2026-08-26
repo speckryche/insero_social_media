@@ -37,7 +37,7 @@ VOICE PROFILE — PERSONAL PROFILE (LinkedIn Personal):
 - Should feel like a real thought from someone with 20 years of telecom experience, not a polished post
 - The CLEC background is a real edge — let it come through when relevant ("I've seen how this works from the carrier side")
 - Personal touches are encouraged when they fit: family, hiking, skiing, golf, the coffee shop, a pool with a mountain view
-- Skip hashtags entirely or use 1 max
+- No hashtags
 - No website CTAs — these feel organic, not promotional
 - A little edge is fine when calling out something broken in the industry
 
@@ -51,7 +51,7 @@ SHARED RULES FOR ALL POSTS:
 - Hook the reader in the first line. Never start with "As a technology broker..." or "In today's fast-paced world..."
 - NEVER use these words/phrases: "leverage", "synergize", "best-in-class", "robust", "unlock value", "game-changer", "cutting-edge", "seamless", "holistic solutions", "in today's digital landscape", "it's more important than ever", "deep dive", "circle back", "at the end of the day"
 - One emoji max per post — most posts should have zero
-- Max 3 hashtags on LinkedIn Company and Facebook posts. No hashtags on X unless truly relevant. No hashtags on Google Business Profile.
+- No hashtags. Not on any platform, in either voice. The post text names the topic plainly.
 - No corporate sign-offs ("Hope this helps!", "Feel free to reach out!") — just end when the thought is done
 - No inspirational quotes from famous people. No generic business advice unrelated to telecom or technology.
 - Don't fabricate specific events, conversations, customer names, or invented statistics
@@ -350,7 +350,7 @@ Never use first-person singular. No "I", "me", "my", "DM me". Always we/our/Inse
   // keeps the longer personal variant.
   const personalVariantRule = isPersonalTake
     ? `2. linkedin_personal_content: **2-5 sentences. Shorter is fine.** If it needs a sixth sentence, cut it down. This is the post — write it in the bucket assigned to it above. First person, Speck's voice, no hashtags, no emojis, no CTAs, no links. Ending on a question to the reader is fine when Speck would actually want the answer.`
-    : `2. linkedin_personal_content: 50-120 words. First person ("I"), Speck's voice. No website CTAs. Skip hashtags or use 1 max. This is for a PERSONAL PROFILE — should feel like a real thought from someone with 20 years in telecom, not a polished post.`;
+    : `2. linkedin_personal_content: 50-120 words. First person ("I"), Speck's voice. No website CTAs. No hashtags. This is for a PERSONAL PROFILE — should feel like a real thought from someone with 20 years in telecom, not a polished post.`;
 
   const imageFields = hasImages
     ? `
@@ -394,7 +394,7 @@ Also generate image data for posts that will have branded images. Include these 
   const platformRules: Array<{ field: string; rule: string }> = [
     {
       field: "linkedin_content",
-      rule: `linkedin_content: 100-200 words. Hook in the first line. Short paragraphs (1-2 sentences each) with white space between them. Max 3 hashtags at the end if any. ${linkedinCtaNote} This is for the COMPANY PAGE — use the company voice profile.`,
+      rule: `linkedin_content: 100-200 words. Hook in the first line. Short paragraphs (1-2 sentences each) with white space between them. No hashtags. ${linkedinCtaNote} This is for the COMPANY PAGE — use the company voice profile.`,
     },
     { field: "linkedin_personal_content", rule: personalVariantRule },
   ];
@@ -402,14 +402,14 @@ Also generate image data for posts that will have branded images. Include these 
   if (enabled.includes("x")) {
     platformRules.push({
       field: "x_content",
-      rule: `x_content: Under 280 characters. Punchy, direct, no hashtags unless truly relevant. The single best sentence or thought from the LinkedIn version. Never include URLs.`,
+      rule: `x_content: Under 280 characters. Punchy, direct, no hashtags. The single best sentence or thought from the LinkedIn version. Never include URLs.`,
     });
   }
 
   if (enabled.includes("facebook")) {
     platformRules.push({
       field: "facebook_content",
-      rule: `facebook_content: AT LEAST 120 words (up to 180). Don't treat Facebook as a shorter LinkedIn — it should have room to develop the thought across 3-5 paragraphs. Slightly more casual than LinkedIn. 1-2 hashtags max. Ask a question in some posts to invite comments.
+      rule: `facebook_content: AT LEAST 120 words (up to 180). Don't treat Facebook as a shorter LinkedIn — it should have room to develop the thought across 3-5 paragraphs. Slightly more casual than LinkedIn. No hashtags. Ask a question in some posts to invite comments.
 
 WORKED EXAMPLE — this illustrates the required length and paragraph structure ONLY. Do not copy the topic or wording into the actual posts:
 

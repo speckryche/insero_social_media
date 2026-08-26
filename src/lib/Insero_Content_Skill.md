@@ -59,11 +59,11 @@ Every personal post should sound like the same person wrote that. Do not reuse i
 - One idea per post. No "but also."
 - No lesson at the end. No "grateful," "as a founder," "what I learned," "humbled," "excited to announce."
 - Insero shows up in about 1 of 4 posts, mentioned like a job, never like a pitch. Never a link.
-- **No hashtags. No emojis. No CTAs. No links. No filler questions to the audience.** (A real question Speck actually wants answered is fine.)
+- **No hashtags. No emojis. No CTAs. No links.** Ending on a question to the reader is fine and Speck likes it — but only when he'd actually want the answer.
 - Text only. Nothing that requires Speck's face or a photo of him.
 
 **Five buckets — rotate evenly across a month**
-1. **Telecom, but human** — something that happened with a customer or a bill, told with delight. Same no-carrier-bashing, no-numbers rules as Voice A.
+1. **Telecom, but human** — something that happened with a customer or a bill, told with delight ("why didn't anyone just tell me that?"). Same no-carrier-bashing, no-numbers rules as Voice A.
 2. **Built this week** — an AI-coding win, high level, slightly amazed that a non-coder built it. No stack or tool names beyond "AI" and "Claude." Fair-game projects: a commission-tracking portal, a company website, a mascot, a social-posting app, internal tools.
 3. **Crypto, sparked** — conversation-starters only: a big moment in the industry, a plain high-level question, a mild opinion. **Never prices, predictions, coins to buy, trading, or Speck's holdings. Never mention his crypto business.** Current events must come from `content_notes` at batch time — never invented.
 4. **Off the clock** — motorcycle rides with wife and kids (or solo), the backyard "mini resort" and pool, hiking (lots), golf (not lately), friends.

@@ -12,13 +12,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Check, X, Sparkles, CheckCircle2 } from "lucide-react";
+import { Loader2, Check, X, Sparkles, CheckCircle2, ArrowRight } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 export interface Proposal {
-  type: "ban" | "speckism";
-  text: string;
+  type: "ban" | "speckism" | "swap";
+  text?: string;
+  from?: string;
+  to?: string;
   reason: string;
   evidence_count: number;
+  high_confidence?: boolean;
 }
 
 interface LearnFromEditsDialogProps {
@@ -31,11 +36,13 @@ type Decision = "pending" | "accepted" | "dismissed";
 const TYPE_LABELS: Record<Proposal["type"], string> = {
   ban: "Banned word",
   speckism: "Speck-ism",
+  swap: "Word swap",
 };
 
 const TYPE_STYLES: Record<Proposal["type"], string> = {
   ban: "bg-rose-100 text-rose-800 border-rose-200",
   speckism: "bg-violet-100 text-violet-800 border-violet-200",
+  swap: "bg-amber-100 text-amber-800 border-amber-200",
 };
 
 export function LearnFromEditsDialog({
@@ -51,6 +58,10 @@ export function LearnFromEditsDialog({
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [done, setDone] = useState<number | null>(null);
+  const [samplesAdded, setSamplesAdded] = useState(0);
+  // Checked by default: the posts Speck rewrote are the best style signal
+  // available, and saving them is additive and reversible in Settings.
+  const [saveStyleSamples, setSaveStyleSamples] = useState(true);
 
   // Kick off the analysis as soon as the dialog opens. The cancelled flag
   // keeps StrictMode's double-invoke from writing state twice.
@@ -102,11 +113,12 @@ export function LearnFromEditsDialog({
       const res = await fetch(`/api/batches/${batchId}/learn`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runId, accepted }),
+        body: JSON.stringify({ runId, accepted, saveStyleSamples }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save");
       setDone(data.acceptedCount ?? accepted.length);
+      setSamplesAdded(data.styleSamplesAdded ?? 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -146,9 +158,20 @@ export function LearnFromEditsDialog({
           <div className="flex flex-col items-center gap-3 py-10">
             <CheckCircle2 className="h-8 w-8 text-green-600" />
             <p className="text-sm text-gray-700">
-              {done === 0
+              {done === 0 && samplesAdded === 0
                 ? "No changes made — nothing was accepted."
-                : `Added ${done} item${done === 1 ? "" : "s"} to your Settings lists.`}
+                : [
+                    done > 0
+                      ? `Added ${done} item${done === 1 ? "" : "s"} to your Settings lists.`
+                      : null,
+                    samplesAdded > 0
+                      ? `Saved ${samplesAdded} style sample${
+                          samplesAdded === 1 ? "" : "s"
+                        }.`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
             </p>
           </div>
         ) : proposals.length === 0 ? (
@@ -182,12 +205,34 @@ export function LearnFromEditsDialog({
                             {TYPE_LABELS[proposal.type]}
                           </Badge>
                           <span className="text-xs text-gray-400">
-                            {proposal.evidence_count} edits
+                            {proposal.evidence_count}{" "}
+                            {proposal.evidence_count === 1 ? "edit" : "edits"}
                           </span>
+                          {proposal.evidence_count === 1 &&
+                            proposal.high_confidence && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-amber-50 text-amber-700 border-amber-200"
+                              >
+                                Notable
+                              </Badge>
+                            )}
                         </div>
-                        <p className="text-sm font-medium text-gray-900 break-words">
-                          {proposal.text}
-                        </p>
+                        {proposal.type === "swap" ? (
+                          <div className="flex items-center gap-2 flex-wrap text-sm">
+                            <span className="font-medium text-gray-500 line-through break-words">
+                              {proposal.from}
+                            </span>
+                            <ArrowRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                            <span className="font-medium text-gray-900 break-words">
+                              {proposal.to}
+                            </span>
+                          </div>
+                        ) : (
+                          <p className="text-sm font-medium text-gray-900 break-words">
+                            {proposal.text}
+                          </p>
+                        )}
                         <p className="text-xs text-gray-500">{proposal.reason}</p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -220,6 +265,26 @@ export function LearnFromEditsDialog({
               })}
             </div>
           </ScrollArea>
+        )}
+
+        {!loading && !error && done === null && proposals.length > 0 && (
+          <div className="flex items-start space-x-2 border-t pt-3">
+            <Checkbox
+              id="saveStyleSamples"
+              checked={saveStyleSamples}
+              onCheckedChange={(v) => setSaveStyleSamples(v === true)}
+            />
+            <Label
+              htmlFor="saveStyleSamples"
+              className="text-sm font-normal cursor-pointer leading-snug"
+            >
+              Save my edited personal posts as style samples
+              <span className="block text-xs text-gray-400">
+                Adds every edited-and-approved Personal Take post from this
+                batch to Settings, deduped, newest 40 kept.
+              </span>
+            </Label>
+          </div>
         )}
 
         <DialogFooter>

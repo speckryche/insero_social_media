@@ -63,6 +63,7 @@ export default function SettingsPage() {
   const [contentNotes, setContentNotes] = useState("");
   const [bannedWords, setBannedWords] = useState("");
   const [speckIsms, setSpeckIsms] = useState("");
+  const [styleSamples, setStyleSamples] = useState("");
   const [enabledPlatforms, setEnabledPlatforms] = useState<Platform[]>(["linkedin"]);
   const [linkedinAuthorType, setLinkedinAuthorType] = useState("organization");
   const [autoPublishPersonal, setAutoPublishPersonal] = useState(false);
@@ -85,6 +86,7 @@ export default function SettingsPage() {
           setContentNotes(data.content_notes || "");
           setBannedWords(data.banned_words || "");
           setSpeckIsms(data.speck_isms || "");
+          setStyleSamples(data.style_samples || "");
           setEnabledPlatforms(parseEnabledPlatforms(data.enabled_platforms));
           setLinkedinAuthorType(data.linkedin_author_type || "organization");
           setAutoPublishPersonal(data.auto_publish_personal || false);
@@ -112,6 +114,7 @@ export default function SettingsPage() {
           content_notes: contentNotes,
           banned_words: bannedWords,
           speck_isms: speckIsms,
+          style_samples: styleSamples,
           enabled_platforms: enabledPlatforms,
           linkedin_author_type: linkedinAuthorType,
           auto_publish_personal: autoPublishPersonal,
@@ -320,6 +323,22 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400">
               One habit per line. Used for Personal Take posts only, as habits
               of speech rather than lines to copy.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Style samples</Label>
+            <Textarea
+              value={styleSamples}
+              onChange={(e) => setStyleSamples(e.target.value)}
+              rows={6}
+              placeholder="One post per line — real posts Speck wrote or rewrote himself."
+              className="text-sm"
+            />
+            <p className="text-xs text-gray-400">
+              One post per line. Shown to Personal Take generation as a rhythm
+              and word-choice reference. &quot;Learn from my edits&quot; can add
+              your edited posts here; the newest 40 are kept.
             </p>
           </div>
 

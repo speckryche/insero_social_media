@@ -14,30 +14,65 @@ function getSupabase() {
   );
 }
 
+// "ban" and "speckism" carry `text`; "swap" carries `from` / `to` instead.
 export interface Proposal {
-  type: "ban" | "speckism";
-  text: string;
+  type: "ban" | "speckism" | "swap";
+  text?: string;
+  from?: string;
+  to?: string;
   reason: string;
   evidence_count: number;
+  // Set by the model on a single-edit proposal it is confident about. At most
+  // one of these survives per run.
+  high_confidence?: boolean;
 }
 
-// Two edits is the floor. One edit is a one-off; a pattern needs repetition.
+// Two edits is the floor for a pattern. One edit is a one-off — allowed only
+// as a single flagged exception per run.
 const MIN_EVIDENCE = 2;
+const MAX_NOTABLE_SINGLES = 1;
+
+// How many style samples to keep. Oldest fall off the front.
+const MAX_STYLE_SAMPLES = 40;
 
 // Comparison key for "already proposed" / "already on the list" checks.
 function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+// A swap's `to` earns a Speck-ism only when it is a distinctive phrase rather
+// than a plain one-word substitution. "folks" -> "people" is just a ban;
+// "reach out" -> "give me a shout" is a habit worth recording.
+function isDistinctivePhrase(text: string): boolean {
+  return text.trim().split(/\s+/).length > 1;
+}
+
+// The identity of a proposal, for dedupe across runs.
+function proposalKey(p: Proposal): string {
+  if (p.type === "swap") {
+    return `swap:${normalize(p.from || "")}->${normalize(p.to || "")}`;
+  }
+  return normalize(p.text || "");
+}
+
 function isProposal(value: unknown): value is Proposal {
   if (!value || typeof value !== "object") return false;
   const p = value as Record<string, unknown>;
+  if (typeof p.reason !== "string" || typeof p.evidence_count !== "number") {
+    return false;
+  }
+  if (p.type === "swap") {
+    return (
+      typeof p.from === "string" &&
+      p.from.trim().length > 0 &&
+      typeof p.to === "string" &&
+      p.to.trim().length > 0
+    );
+  }
   return (
     (p.type === "ban" || p.type === "speckism") &&
     typeof p.text === "string" &&
-    p.text.trim().length > 0 &&
-    typeof p.reason === "string" &&
-    typeof p.evidence_count === "number"
+    p.text.trim().length > 0
   );
 }
 
@@ -46,8 +81,15 @@ const SYSTEM_PROMPT = `You analyze how a human editor changes AI-written social 
 - "Banned words" — words or phrases the editor consistently removes or replaces. These are injected into every prompt as things never to use.
 - "Speck-isms" — habits of speech the editor consistently adds. These are injected into personal-profile posts only, as habits rather than lines to copy.
 
+Three proposal types:
+- "ban" — a word or phrase to stop using. Carries "text".
+- "speckism" — a habit of speech to adopt. Carries "text".
+- "swap" — the editor replaced the same word or phrase with the same replacement across several edits. Carries "from" and "to" instead of "text" (e.g. from "folks", to "people").
+
 Rules:
 - Propose ONLY patterns supported by at least ${MIN_EVIDENCE} separate edits. One-off changes are not patterns.
+- ONE exception: you may include at most ${MAX_NOTABLE_SINGLES} proposal backed by a single edit if it is unmistakable and you are highly confident. Mark it "high_confidence": true and set evidence_count to 1. If nothing meets that bar, do not include one.
+- Prefer a "swap" over a bare "ban" when the editor clearly substituted one thing for another — the replacement is the useful half.
 - Never propose something already present in either list you are given.
 - A "ban" proposal is a short word or phrase, not a sentence of advice.
 - A "speckism" proposal is a short description of a habit, not a line to copy.
@@ -147,11 +189,15 @@ export async function POST(
     const alreadySeen = new Set<string>();
     for (const run of priorRuns || []) {
       for (const proposal of (run.proposals as Proposal[]) || []) {
-        if (proposal?.text) alreadySeen.add(normalize(proposal.text));
+        if (proposal?.type) alreadySeen.add(proposalKey(proposal));
       }
     }
+    // Anything already on a list counts as seen — including a swap whose
+    // "from" is already banned, which would be redundant.
+    const onAList = new Set<string>();
     for (const word of [...bannedWords, ...speckIsms]) {
       alreadySeen.add(normalize(word));
+      onAList.add(normalize(word));
     }
 
     const editBlocks = edits
@@ -179,15 +225,24 @@ Here are ${edits.length} edits, each showing what the model wrote and what the e
 
 ${editBlocks}
 
-Return a JSON array of proposals. Each object must have exactly these fields:
+Return a JSON array of proposals. Use one of these two shapes per object:
 [
   {
     "type": "ban" or "speckism",
     "text": "...",
     "reason": "one sentence on what the edits show",
     "evidence_count": 2
+  },
+  {
+    "type": "swap",
+    "from": "the word or phrase that was replaced",
+    "to": "what it was replaced with",
+    "reason": "one sentence on what the edits show",
+    "evidence_count": 2
   }
 ]
+
+Add "high_confidence": true to at most ${MAX_NOTABLE_SINGLES} object if it rests on a single edit you are certain about.
 
 Return ONLY the JSON array. No markdown fences, no explanation, no extra text.`;
 
@@ -236,11 +291,24 @@ Return ONLY the JSON array. No markdown fences, no explanation, no extra text.`;
 
     // Belt and braces: the prompt states these rules, and we enforce them here
     // too so a sloppy response cannot slip past.
-    const proposals = (Array.isArray(raw) ? raw : [])
+    const cleaned = (Array.isArray(raw) ? raw : [])
       .filter(isProposal)
-      .filter((p) => p.evidence_count >= MIN_EVIDENCE)
-      .filter((p) => !alreadySeen.has(normalize(p.text)))
-      .map((p) => ({ ...p, text: p.text.trim() }));
+      .map((p) => ({
+        ...p,
+        text: p.text?.trim(),
+        from: p.from?.trim(),
+        to: p.to?.trim(),
+      }))
+      .filter((p) => !alreadySeen.has(proposalKey(p)))
+      // A swap whose "from" is already banned adds nothing.
+      .filter((p) => p.type !== "swap" || !onAList.has(normalize(p.from || "")));
+
+    // Everything at or above the threshold, plus at most one flagged single.
+    const strong = cleaned.filter((p) => p.evidence_count >= MIN_EVIDENCE);
+    const notable = cleaned
+      .filter((p) => p.evidence_count === 1 && p.high_confidence === true)
+      .slice(0, MAX_NOTABLE_SINGLES);
+    const proposals = [...strong, ...notable];
 
     const { data: run, error: runError } = await supabase
       .from("learn_runs")
@@ -272,7 +340,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { runId, accepted } = await request.json();
+    const { runId, accepted, saveStyleSamples } = await request.json();
 
     if (!runId || !Array.isArray(accepted)) {
       return NextResponse.json(
@@ -286,7 +354,7 @@ export async function PATCH(
 
     const { data: settings, error: settingsError } = await supabase
       .from("app_settings")
-      .select("id, banned_words, speck_isms")
+      .select("id, banned_words, speck_isms, style_samples")
       .single();
 
     if (settingsError || !settings) {
@@ -303,14 +371,77 @@ export async function PATCH(
       ...speckIsms.map(normalize),
     ]);
 
+    const addBan = (text: string) => {
+      const value = text.trim();
+      if (!value || existing.has(normalize(value))) return;
+      existing.add(normalize(value));
+      bannedWords.push(value);
+    };
+    const addSpeckIsm = (text: string) => {
+      const value = text.trim();
+      if (!value || existing.has(normalize(value))) return;
+      existing.add(normalize(value));
+      speckIsms.push(value);
+    };
+
     for (const proposal of chosen) {
-      const text = proposal.text.trim();
-      if (!text || existing.has(normalize(text))) continue;
-      existing.add(normalize(text));
+      if (proposal.type === "swap") {
+        const from = (proposal.from || "").trim();
+        const to = (proposal.to || "").trim();
+        if (!from) continue;
+        // The replaced word gets banned either way. The replacement only
+        // becomes a Speck-ism when it is a phrase worth imitating.
+        addBan(from);
+        if (to && isDistinctivePhrase(to)) {
+          addSpeckIsm(`replaces '${from}' with '${to}'`);
+        }
+        continue;
+      }
+
+      const text = (proposal.text || "").trim();
+      if (!text) continue;
       if (proposal.type === "ban") {
-        bannedWords.push(text);
+        addBan(text);
       } else {
-        speckIsms.push(text);
+        addSpeckIsm(text);
+      }
+    }
+
+    // Optionally fold this batch's edited-and-approved personal posts into the
+    // style samples. Newlines are flattened because the column is one entry
+    // per line.
+    let styleSamples = parseListSetting(settings.style_samples);
+    let styleSamplesAdded = 0;
+
+    if (saveStyleSamples) {
+      const { data: personalPosts } = await supabase
+        .from("posts")
+        .select(
+          "post_number, linkedin_personal_content, original_linkedin_personal_content, linkedin_personal_approved"
+        )
+        .eq("batch_id", params.id)
+        .eq("linkedin_personal_approved", true)
+        .order("post_number", { ascending: true });
+
+      const seenSamples = new Set(styleSamples.map(normalize));
+
+      for (const post of personalPosts || []) {
+        const after = (post.linkedin_personal_content as string) || "";
+        const before =
+          (post.original_linkedin_personal_content as string) || "";
+        if (!after || after === before) continue;
+
+        const flattened = after.replace(/\s+/g, " ").trim();
+        if (!flattened || seenSamples.has(normalize(flattened))) continue;
+
+        seenSamples.add(normalize(flattened));
+        styleSamples.push(flattened);
+        styleSamplesAdded++;
+      }
+
+      // Keep the most recent MAX_STYLE_SAMPLES; oldest fall off the front.
+      if (styleSamples.length > MAX_STYLE_SAMPLES) {
+        styleSamples = styleSamples.slice(-MAX_STYLE_SAMPLES);
       }
     }
 
@@ -319,6 +450,9 @@ export async function PATCH(
       .update({
         banned_words: bannedWords.join("\n"),
         speck_isms: speckIsms.join("\n"),
+        ...(saveStyleSamples
+          ? { style_samples: styleSamples.join("\n") }
+          : {}),
       })
       .eq("id", settings.id);
 
@@ -339,6 +473,7 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
       acceptedCount: chosen.length,
+      styleSamplesAdded,
       bannedWords,
       speckIsms,
     });

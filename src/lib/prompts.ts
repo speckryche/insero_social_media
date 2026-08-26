@@ -191,7 +191,7 @@ RULES:
 - One idea per post. No "but also."
 - No lesson at the end. No "grateful," "as a founder," "what I learned," "humbled," "excited to announce."
 - Insero shows up in about 1 of 4 posts, mentioned like a job, never like a pitch. Never a link.
-- No hashtags. No emojis. No CTAs. No links. No filler questions to the audience. (A real question Speck actually wants answered is fine.)
+- No hashtags. No emojis. No CTAs. No links. Ending on a question to the reader is fine and Speck likes it — but only when he'd actually want the answer.
 - Text only. Nothing that requires Speck's face or a photo of him.
 - Vary sentence openings across posts — do not start two posts the same way.`,
 };
@@ -272,6 +272,7 @@ const NUMBER_WORDS: Record<number, string> = {
 
 export interface CategoryPromptOptions {
   speckIsms?: string | null;
+  styleSamples?: string | null;
   enabledPlatforms?: Platform[];
 }
 
@@ -280,12 +281,23 @@ export function buildCategoryPrompt(
   postCount: number = 12,
   options: CategoryPromptOptions = {}
 ): string {
-  const { speckIsms, enabledPlatforms } = options;
+  const { speckIsms, styleSamples, enabledPlatforms } = options;
   const enabled = enabledPlatforms?.length
     ? enabledPlatforms
     : DEFAULT_ENABLED_PLATFORMS;
   const hasImages = IMAGE_CATEGORIES.includes(category);
   const isPersonalTake = category === "personal_take";
+
+  // Style samples are real posts in Speck's own hand — the strongest signal
+  // available for the register. They sit after the rules and before the bucket
+  // assignments so the model reads the voice first, then its assignment.
+  const styleSampleList = isPersonalTake ? parseListSetting(styleSamples) : [];
+  const styleSamplesBlock = styleSampleList.length
+    ? `
+Recent posts Speck wrote or rewrote himself. Match this rhythm, word choice, and tone. Do not reuse their topics or sentences.
+${styleSampleList.map((sample) => `- ${sample}`).join("\n")}
+`
+    : "";
 
   // Speck-isms are Voice B habits, so they only reach personal_take.
   const speckIsmsList = isPersonalTake ? parseListSetting(speckIsms) : [];
@@ -299,7 +311,7 @@ ${speckIsmsList.map((item) => `- ${item}`).join("\n")}
   // personal_take is the only category that reaches Speck's profile, so it
   // carries the Voice B bucket rotation, the facts list, and the crypto rules.
   const voiceBBlock = isPersonalTake
-    ? `
+    ? `${styleSamplesBlock}
 BUCKET ASSIGNMENTS — every post has an assigned bucket. Write each post in its own bucket, in this exact order. Do not cluster several posts on one bucket, and do not swap assignments around.
 
 ${buildBucketAssignments(postCount)}
@@ -329,7 +341,7 @@ Never use first-person singular. No "I", "me", "my", "DM me". Always we/our/Inse
   // Voice B is capped at 1-3 sentences by the skill file; every other category
   // keeps the longer personal variant.
   const personalVariantRule = isPersonalTake
-    ? `2. linkedin_personal_content: **1-3 sentences. Hard limit.** If it needs a fourth sentence, cut it down. This is the post — write it in the bucket assigned to it above. First person, Speck's voice, no hashtags, no emojis, no CTAs, no links, no questions to the audience.`
+    ? `2. linkedin_personal_content: **1-3 sentences. Hard limit.** If it needs a fourth sentence, cut it down. This is the post — write it in the bucket assigned to it above. First person, Speck's voice, no hashtags, no emojis, no CTAs, no links. Ending on a question to the reader is fine when Speck would actually want the answer.`
     : `2. linkedin_personal_content: 50-120 words. First person ("I"), Speck's voice. No website CTAs. Skip hashtags or use 1 max. This is for a PERSONAL PROFILE — should feel like a real thought from someone with 20 years in telecom, not a polished post.`;
 
   const imageFields = hasImages

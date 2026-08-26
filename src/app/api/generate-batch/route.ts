@@ -339,6 +339,7 @@ interface GenerationGuidance {
   contentNotes?: string;
   bannedWords?: string;
   speckIsms?: string;
+  styleSamples?: string;
   enabledPlatforms?: Platform[];
 }
 
@@ -386,6 +387,7 @@ async function generateCategoryPosts(
           role: "user",
           content: buildCategoryPrompt(category, postCount, {
             speckIsms: guidance.speckIsms,
+            styleSamples: guidance.styleSamples,
             enabledPlatforms: guidance.enabledPlatforms,
           }),
         },
@@ -568,6 +570,7 @@ export async function POST(request: NextRequest) {
       contentNotes: settings.content_notes || "",
       bannedWords: settings.banned_words || "",
       speckIsms: settings.speck_isms || "",
+      styleSamples: settings.style_samples || "",
       enabledPlatforms,
     };
     console.log(

@@ -48,12 +48,14 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Switch } from "@/components/ui/switch";
 import { PostEditSheet } from "@/components/post-edit-sheet";
 import { PostPreviewModal } from "@/components/post-preview-modal";
+import { LearnFromEditsDialog } from "@/components/learn-from-edits-dialog";
 import {
   DEFAULT_ENABLED_PLATFORMS,
   OPTIONAL_PLATFORMS,
@@ -263,6 +265,7 @@ export function BatchReview({
   // Cards show full post text by default. Ids land here only when the user
   // collapses that card back down to a four-line preview.
   const [collapsedPostIds, setCollapsedPostIds] = useState<Set<string>>(new Set());
+  const [learningOpen, setLearningOpen] = useState(false);
 
   function toggleCollapsed(postId: string) {
     setCollapsedPostIds((prev) => {
@@ -708,6 +711,19 @@ export function BatchReview({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Reads the batch's edits and proposes Settings additions. Never
+              applies anything on its own — every proposal is accepted or
+              dismissed by hand in the dialog. */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLearningOpen(true)}
+            disabled={loadingAction !== null}
+          >
+            <Sparkles className="h-4 w-4 mr-1.5 text-blue-600" />
+            Learn from my edits
+          </Button>
+
           {(batch.status === "draft") && (
             <>
               <AlertDialog>
@@ -1455,6 +1471,13 @@ export function BatchReview({
           post={previewingPost}
           onClose={() => setPreviewingPost(null)}
           enabledPlatforms={enabledPlatforms}
+        />
+      )}
+
+      {learningOpen && (
+        <LearnFromEditsDialog
+          batchId={batch.id}
+          onClose={() => setLearningOpen(false)}
         />
       )}
     </div>

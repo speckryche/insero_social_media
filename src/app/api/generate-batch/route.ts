@@ -12,6 +12,10 @@ import {
   parseEnabledPlatforms,
   type Platform,
 } from "@/lib/platforms";
+import {
+  stripCodeFences,
+  escapeRawControlCharsInStrings,
+} from "@/lib/json-repair";
 
 // Read content skill file as the single source of truth for post generation
 const CONTENT_SKILL = readFileSync(
@@ -327,77 +331,7 @@ function interleaveCategories(
   return result;
 }
 
-// Strips markdown code fences the model sometimes adds despite being told not
-// to. Handles both a fenced whole response and stray prose around the array.
-function stripCodeFences(raw: string): string {
-  let text = raw.trim();
 
-  if (text.startsWith("```")) {
-    text = text.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
-    text = text.trim();
-  }
-
-  // If anything still surrounds the array, keep only the array itself.
-  if (!text.startsWith("[")) {
-    const start = text.indexOf("[");
-    const end = text.lastIndexOf("]");
-    if (start !== -1 && end > start) {
-      text = text.slice(start, end + 1);
-    }
-  }
-
-  return text;
-}
-
-// The model writes multi-paragraph posts, and it occasionally emits a real
-// newline inside a JSON string value instead of \n — which makes JSON.parse
-// fail with "Unterminated string in JSON at position N". Walk the text and
-// escape raw control characters that appear inside string values, leaving
-// structural whitespace between tokens untouched.
-function escapeRawControlCharsInStrings(text: string): string {
-  let out = "";
-  let inString = false;
-  let escaped = false;
-
-  for (const ch of text) {
-    if (escaped) {
-      out += ch;
-      escaped = false;
-      continue;
-    }
-
-    if (ch === "\\") {
-      out += ch;
-      escaped = true;
-      continue;
-    }
-
-    if (ch === '"') {
-      inString = !inString;
-      out += ch;
-      continue;
-    }
-
-    if (inString) {
-      if (ch === "\n") {
-        out += "\\n";
-        continue;
-      }
-      if (ch === "\r") {
-        out += "\\r";
-        continue;
-      }
-      if (ch === "\t") {
-        out += "\\t";
-        continue;
-      }
-    }
-
-    out += ch;
-  }
-
-  return out;
-}
 
 // The editable lists from app_settings, plus the free-text notes. All three
 // are stored as plain text and read at generation time.
@@ -725,6 +659,13 @@ export async function POST(request: NextRequest) {
         time_slot: sched.time_slot,
         content_category: item.category,
         linkedin_content: item.post.linkedin_content,
+        // The model's first draft, frozen. "Learn from my edits" diffs the
+        // approved content against these to see what Speck actually changes.
+        original_linkedin_content: item.post.linkedin_content,
+        original_linkedin_personal_content:
+          item.category === "personal_take"
+            ? item.post.linkedin_personal_content
+            : "",
         // Only personal_take posts reach Speck's profile (skill file, Voice B —
         // "How the profile is fed"). Blanking the variant everywhere else means
         // there is nothing to approve or publish by accident.

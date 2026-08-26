@@ -58,6 +58,11 @@ import { PostEditSheet } from "@/components/post-edit-sheet";
 import { PostPreviewModal } from "@/components/post-preview-modal";
 import { LearnFromEditsDialog } from "@/components/learn-from-edits-dialog";
 import {
+  BATCH_SCOPE_LABELS,
+  BATCH_SCOPE_STYLES,
+  batchScopeKey,
+} from "@/lib/batch-scope";
+import {
   DEFAULT_ENABLED_PLATFORMS,
   OPTIONAL_PLATFORMS,
   type Platform,
@@ -82,18 +87,6 @@ const BATCH_STATUS_STYLES: Record<string, string> = {
   approved: "bg-blue-100 text-blue-800 border-blue-200",
   active: "bg-green-100 text-green-800 border-green-200",
   completed: "bg-gray-100 text-gray-700 border-gray-200",
-};
-
-const BATCH_SCOPE_LABELS: Record<string, string> = {
-  both: "Company + Personal",
-  company: "Company only",
-  personal: "Personal only",
-};
-
-const BATCH_SCOPE_STYLES: Record<string, string> = {
-  both: "bg-slate-100 text-slate-700 border-slate-200",
-  company: "bg-blue-100 text-blue-800 border-blue-200",
-  personal: "bg-violet-100 text-violet-800 border-violet-200",
 };
 
 const CATEGORY_STYLES: Record<string, string> = {
@@ -716,13 +709,11 @@ export function BatchReview({
               >
                 {batch.status.charAt(0).toUpperCase() + batch.status.slice(1)}
               </Badge>
-              {/* Batches created before the scope column exists read as NULL,
-                  which means the same thing as "both". */}
               <Badge
-                className={BATCH_SCOPE_STYLES[batch.scope || "both"]}
+                className={BATCH_SCOPE_STYLES[batchScopeKey(batch.scope)]}
                 variant="outline"
               >
-                {BATCH_SCOPE_LABELS[batch.scope || "both"]}
+                {BATCH_SCOPE_LABELS[batchScopeKey(batch.scope)]}
               </Badge>
             </div>
             <p className="text-sm text-gray-500 mt-0.5">

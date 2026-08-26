@@ -4,6 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { GenerateBatchModal } from "@/components/generate-batch-modal";
+import {
+  BATCH_SCOPE_LABELS,
+  BATCH_SCOPE_STYLES,
+  batchScopeKey,
+} from "@/lib/batch-scope";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -91,12 +96,20 @@ export default async function BatchesPage() {
                         </p>
                       </div>
                     </div>
-                    <Badge
-                      className={STATUS_STYLES[batch.status] || ""}
-                      variant="outline"
-                    >
-                      {batch.status.charAt(0).toUpperCase() + batch.status.slice(1)}
-                    </Badge>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge
+                        className={BATCH_SCOPE_STYLES[batchScopeKey(batch.scope)]}
+                        variant="outline"
+                      >
+                        {BATCH_SCOPE_LABELS[batchScopeKey(batch.scope)]}
+                      </Badge>
+                      <Badge
+                        className={STATUS_STYLES[batch.status] || ""}
+                        variant="outline"
+                      >
+                        {batch.status.charAt(0).toUpperCase() + batch.status.slice(1)}
+                      </Badge>
+                    </div>
                   </CardContent>
                 </Card>
               </Link>

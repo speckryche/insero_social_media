@@ -342,15 +342,20 @@ export async function PATCH(
   try {
     const { runId, accepted, saveStyleSamples } = await request.json();
 
-    if (!runId || !Array.isArray(accepted)) {
-      return NextResponse.json(
-        { error: "runId and accepted[] are required" },
-        { status: 400 }
-      );
+    // Both halves are optional and independent: accepting proposals needs a
+    // runId, saving style samples does not. A call that does neither is a
+    // no-op, not an error.
+    const chosen = Array.isArray(accepted) ? accepted.filter(isProposal) : [];
+
+    if (!saveStyleSamples && chosen.length === 0) {
+      return NextResponse.json({
+        success: true,
+        acceptedCount: 0,
+        styleSamplesAdded: 0,
+      });
     }
 
     const supabase = getSupabase();
-    const chosen = accepted.filter(isProposal);
 
     const { data: settings, error: settingsError } = await supabase
       .from("app_settings")
@@ -414,13 +419,17 @@ export async function PATCH(
     let styleSamplesAdded = 0;
 
     if (saveStyleSamples) {
+      // A post qualifies on category, a real diff, and having been worked on
+      // — "edited" counts as much as "approved", since a rewrite Speck has not
+      // formally approved yet is still a rewrite in his own hand.
       const { data: personalPosts } = await supabase
         .from("posts")
         .select(
-          "post_number, linkedin_personal_content, original_linkedin_personal_content, linkedin_personal_approved"
+          "post_number, linkedin_personal_content, original_linkedin_personal_content, content_category, status"
         )
         .eq("batch_id", params.id)
-        .eq("linkedin_personal_approved", true)
+        .eq("content_category", "personal_take")
+        .in("status", ["approved", "edited"])
         .order("post_number", { ascending: true });
 
       const seenSamples = new Set(styleSamples.map(normalize));
@@ -460,14 +469,16 @@ export async function PATCH(
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
-    const { error: runError } = await supabase
-      .from("learn_runs")
-      .update({ accepted: chosen })
-      .eq("id", runId)
-      .eq("batch_id", params.id);
+    if (runId) {
+      const { error: runError } = await supabase
+        .from("learn_runs")
+        .update({ accepted: chosen })
+        .eq("id", runId)
+        .eq("batch_id", params.id);
 
-    if (runError) {
-      return NextResponse.json({ error: runError.message }, { status: 500 });
+      if (runError) {
+        return NextResponse.json({ error: runError.message }, { status: 500 });
+      }
     }
 
     return NextResponse.json({

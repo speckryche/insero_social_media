@@ -105,7 +105,6 @@ export function LearnFromEditsDialog({
   const acceptedCount = decisions.filter((d) => d === "accepted").length;
 
   async function handleApply() {
-    if (!runId) return;
     setSaving(true);
     setError(null);
     try {
@@ -177,7 +176,9 @@ export function LearnFromEditsDialog({
         ) : proposals.length === 0 ? (
           <p className="text-sm text-gray-600 py-6">
             {message ||
-              "No repeated patterns found in this batch's edits. Edit a few more posts and run this again."}
+              "No repeated patterns found in this batch's edits. Edit a few more posts and run this again."}{" "}
+            You can still save your edited personal posts as style samples
+            below.
           </p>
         ) : (
           <ScrollArea className="max-h-[50vh] pr-3">
@@ -267,7 +268,7 @@ export function LearnFromEditsDialog({
           </ScrollArea>
         )}
 
-        {!loading && !error && done === null && proposals.length > 0 && (
+        {!loading && !error && done === null && (
           <div className="flex items-start space-x-2 border-t pt-3">
             <Checkbox
               id="saveStyleSamples"
@@ -288,7 +289,7 @@ export function LearnFromEditsDialog({
         )}
 
         <DialogFooter>
-          {done !== null || proposals.length === 0 || error ? (
+          {done !== null || error ? (
             <Button onClick={onClose} variant="outline">
               Close
             </Button>
@@ -299,7 +300,7 @@ export function LearnFromEditsDialog({
               </Button>
               <Button
                 onClick={handleApply}
-                disabled={saving || acceptedCount === 0}
+                disabled={saving || (acceptedCount === 0 && !saveStyleSamples)}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 {saving ? (
@@ -307,7 +308,9 @@ export function LearnFromEditsDialog({
                 ) : (
                   <Check className="h-4 w-4 mr-1.5" />
                 )}
-                Add {acceptedCount} to Settings
+                {acceptedCount > 0
+                  ? `Add ${acceptedCount} to Settings`
+                  : "Add to Settings"}
               </Button>
             </>
           )}

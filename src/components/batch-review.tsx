@@ -49,6 +49,7 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  BookmarkPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -266,6 +267,7 @@ export function BatchReview({
   // collapses that card back down to a four-line preview.
   const [collapsedPostIds, setCollapsedPostIds] = useState<Set<string>>(new Set());
   const [learningOpen, setLearningOpen] = useState(false);
+  const [savedSamples, setSavedSamples] = useState<number | null>(null);
 
   function toggleCollapsed(postId: string) {
     setCollapsedPostIds((prev) => {
@@ -344,6 +346,27 @@ export function BatchReview({
             status: p.status === "draft" || p.status === "edited" ? "approved" : p.status,
           }))
         );
+      }
+    } finally {
+      setLoadingAction(null);
+    }
+  }
+
+  // Saves this batch's edited personal posts straight to Style samples, with
+  // no proposals involved. Same endpoint the Learn dialog uses, minus a runId.
+  async function handleSaveStyleSamples() {
+    setLoadingAction("style-samples");
+    setSavedSamples(null);
+    try {
+      const res = await fetch(`/api/batches/${batch.id}/learn`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accepted: [], saveStyleSamples: true }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSavedSamples(data.styleSamplesAdded ?? 0);
+        setTimeout(() => setSavedSamples(null), 4000);
       }
     } finally {
       setLoadingAction(null);
@@ -722,6 +745,28 @@ export function BatchReview({
           >
             <Sparkles className="h-4 w-4 mr-1.5 text-blue-600" />
             Learn from my edits
+          </Button>
+
+          {/* Same style-sample save as the dialog offers, without needing to
+              run an analysis first. */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSaveStyleSamples}
+            disabled={loadingAction !== null}
+          >
+            {loadingAction === "style-samples" ? (
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+            ) : savedSamples !== null ? (
+              <Check className="h-4 w-4 mr-1.5 text-green-600" />
+            ) : (
+              <BookmarkPlus className="h-4 w-4 mr-1.5 text-blue-600" />
+            )}
+            {savedSamples !== null
+              ? savedSamples === 0
+                ? "Nothing new to save"
+                : `Saved ${savedSamples}`
+              : "Save edits as style samples"}
           </Button>
 
           {(batch.status === "draft") && (

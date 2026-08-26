@@ -200,7 +200,7 @@ const VOICE_B_BUCKETS: Array<{ name: string; brief: string }> = [
   {
     name: "Telecom, but human",
     brief:
-      "Something that happened with a customer or a bill, told with delight (\"why didn't anyone just tell me that?\"). Same no-carrier-bashing, no-numbers rules as Voice A.",
+      "Something that happened with a customer or a bill, told with delight. Same no-carrier-bashing, no-numbers rules as Voice A.",
   },
   {
     name: "Built this week",

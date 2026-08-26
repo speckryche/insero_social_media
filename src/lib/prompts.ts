@@ -373,15 +373,17 @@ Also generate image data for posts that will have branded images. Include these 
   "image_stat_label": "..."`
     : "";
 
-  // CTAs are rare per the brand bible — most posts should not have one. The
-  // examples stay plural: linkedin_content is the company page, so a
-  // first-person-singular CTA would break the company voice rule above.
-  const linkedinCtaNote = postCount <= 3
-    ? "Most posts should NOT have a CTA. If one fits naturally, use a soft prompt like \"DM us if you want to talk through your situation\" in at most 1 of the posts."
-    : `Most posts should NOT have a CTA — a CTA on every post looks desperate. In about 20% of posts (${Math.round(postCount * 0.2)} out of ${postCount}), include a soft, organic prompt like "DM us if you want to talk through your situation" or "happy to compare options for you" — never a hard sales ask, never a link to a landing page.`;
-  const googleCtaNote = postCount <= 3
-    ? "In at most 1 of the posts, include a soft mention like \"reach out for a comparison\" or a low-key reference to www.insero.cloud."
-    : `In about 30% of posts (${Math.round(postCount * 0.3)} out of ${postCount}), include a soft mention like "reach out for a comparison" or a low-key reference to www.insero.cloud. Most posts should just be useful information with no CTA.`;
+  // Company CTA rule, per Voice A in the content skill. The closers are
+  // plural on purpose — linkedin_content is the company page, so a
+  // first-person-singular close would break the company voice rule above.
+  const CLOSER_EXAMPLES = `"We can help with that." / "That's a five-minute review for us." / "If that line's on your bill, we'd look at it for free." / "Happy to check yours." / "Ask us before you sign."`;
+
+  const ctaRule = `About half of the posts (${Math.round(
+    postCount * 0.5
+  )} out of ${postCount}) end with a one-line soft close, but only when the post set up a problem Insero actually solves. Pure explainers end on the explanation. Never a link in the body. Rotate the closers so it never reads like a signature — write new ones in the same spirit as these, and never use the same closer twice in this batch: ${CLOSER_EXAMPLES}`;
+
+  const linkedinCtaNote = ctaRule;
+  const googleCtaNote = ctaRule;
 
   // Use the base category prompt but replace "Generate 12" with actual count
   const categoryPrompt = CATEGORY_PROMPTS[category].replace(/Generate 12/g, `Generate ${postCount}`);

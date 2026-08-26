@@ -87,6 +87,9 @@ export default async function BatchesPage() {
                         </p>
                         <p className="text-sm text-gray-500">
                           {approved}/{batch.total_posts} approved &middot;{" "}
+                          {batch.post_count
+                            ? `Size ${batch.post_count} · `
+                            : ""}
                           Created {new Date(batch.created_at).toLocaleDateString()}
                         </p>
                       </div>

@@ -47,14 +47,22 @@ const SCOPE_OPTIONS: Array<{ value: BatchScope; label: string; hint: string }> =
   { value: "personal", label: "Personal only", hint: "Personal Take posts only" },
 ];
 
-// Full-batch post counts per scope — the share each side would get inside a
-// 60-post Both batch. Test mode is 2 per included category instead.
-const SCOPE_FULL_COUNTS: Record<BatchScope, number> = {
-  both: 60,
-  company: 45,
-  personal: 15,
+const POST_COUNT_PRESETS = [10, 20, 30, 40, 50, 60];
+const DEFAULT_POST_COUNT = 30;
+
+// Each scope's share of the mix. A scoped batch of size N takes its share of
+// N — the same split a Both batch of size N would produce internally.
+const SCOPE_SHARE: Record<BatchScope, number> = {
+  both: 1,
+  company: 0.75,
+  personal: 0.25,
 };
 
+function scopeCount(scope: BatchScope, postCount: number): number {
+  return Math.max(1, Math.round(postCount * SCOPE_SHARE[scope]));
+}
+
+// Test mode ignores the size picker: 2 per included category.
 const SCOPE_TEST_COUNTS: Record<BatchScope, number> = {
   both: 10,
   company: 8,
@@ -73,6 +81,7 @@ export function GenerateBatchModal() {
   const [year, setYear] = useState(String(defaultYear));
   const [testMode, setTestMode] = useState(false);
   const [scope, setScope] = useState<BatchScope>("both");
+  const [postCount, setPostCount] = useState(String(DEFAULT_POST_COUNT));
   const [includeImages, setIncludeImages] = useState(true);
   const [loading, setLoading] = useState(false);
   const [progressIndex, setProgressIndex] = useState(0);
@@ -100,6 +109,7 @@ export function GenerateBatchModal() {
           testMode,
           includeImages,
           scope,
+          postCount: parseInt(postCount),
         }),
       });
 
@@ -123,7 +133,10 @@ export function GenerateBatchModal() {
   const currentYear = now.getFullYear();
   const years = [currentYear, currentYear + 1];
 
-  const postCount = testMode ? SCOPE_TEST_COUNTS[scope] : SCOPE_FULL_COUNTS[scope];
+  const chosenSize = parseInt(postCount) || DEFAULT_POST_COUNT;
+  const effectiveCount = testMode
+    ? SCOPE_TEST_COUNTS[scope]
+    : scopeCount(scope, chosenSize);
   const scopeLabel = SCOPE_OPTIONS.find((o) => o.value === scope)!.label;
 
   return (
@@ -144,8 +157,8 @@ export function GenerateBatchModal() {
             <div className="text-center">
               <p className="font-medium text-gray-900">
                 {testMode
-                  ? `Generating ${postCount} test posts...`
-                  : `Generating ${postCount} posts...`}
+                  ? `Generating ${effectiveCount} test posts...`
+                  : `Generating ${effectiveCount} posts...`}
               </p>
               <p className="text-sm text-gray-500 mt-1">
                 {PROGRESS_MESSAGES[progressIndex]}
@@ -164,8 +177,8 @@ export function GenerateBatchModal() {
               </DialogTitle>
               <DialogDescription>
                 {testMode
-                  ? `Generate ${postCount} test posts (2 per category, ${scopeLabel.toLowerCase()}) to review content quality and image templates before committing to a full batch.`
-                  : `Generate ${postCount} AI-written posts (${scopeLabel.toLowerCase()}), spread across the month. You can review and edit them before approving.`}
+                  ? `Generate ${effectiveCount} test posts (2 per category, ${scopeLabel.toLowerCase()}) to review content quality and image templates before committing to a full batch.`
+                  : `Generate ${effectiveCount} AI-written posts (${scopeLabel.toLowerCase()}), spread evenly across the month. You can review and edit them before approving.`}
               </DialogDescription>
             </DialogHeader>
 
@@ -202,6 +215,29 @@ export function GenerateBatchModal() {
                   </Select>
                 </div>
               </div>
+
+              {/* Batch size. Test mode ignores it, so it's hidden there. */}
+              {!testMode && (
+                <div className="space-y-2">
+                  <Label htmlFor="postCount">Posts</Label>
+                  <Select value={postCount} onValueChange={setPostCount}>
+                    <SelectTrigger id="postCount">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {POST_COUNT_PRESETS.map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n} posts
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-400">
+                    Spread evenly across the month. A scoped batch takes its
+                    share — {scopeLabel.toLowerCase()} gives {effectiveCount}.
+                  </p>
+                </div>
+              )}
 
               {/* Scope — a radio group built from buttons so it needs no new
                   dependency. role/aria-checked keep it a real radio group. */}
@@ -240,7 +276,7 @@ export function GenerateBatchModal() {
                             {option.hint} &middot;{" "}
                             {testMode
                               ? SCOPE_TEST_COUNTS[option.value]
-                              : SCOPE_FULL_COUNTS[option.value]}{" "}
+                              : scopeCount(option.value, chosenSize)}{" "}
                             posts
                           </span>
                         </span>
@@ -257,7 +293,7 @@ export function GenerateBatchModal() {
                   onCheckedChange={(checked) => setTestMode(checked === true)}
                 />
                 <Label htmlFor="testMode" className="text-sm font-normal cursor-pointer">
-                  Test mode ({postCount} posts — 2 per category, faster generation)
+                  Test mode ({effectiveCount} posts — 2 per category, faster generation)
                 </Label>
               </div>
 
@@ -290,8 +326,8 @@ export function GenerateBatchModal() {
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {testMode
-                  ? `Generate ${postCount} Test Posts`
-                  : `Generate ${postCount} Posts`}
+                  ? `Generate ${effectiveCount} Test Posts`
+                  : `Generate ${effectiveCount} Posts`}
               </Button>
             </div>
           </>

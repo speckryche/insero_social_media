@@ -68,15 +68,24 @@ function categoriesForScope(scope: BatchScope): ContentCategory[] {
   return CATEGORIES;
 }
 
+// Batch sizes offered in the Generate dialog.
+const POST_COUNT_PRESETS = [10, 20, 30, 40, 50, 60];
+const DEFAULT_POST_COUNT = 30;
+
 // Full-batch totals. A scoped batch gets exactly the share it would have had
-// inside a 60-post "both" batch: company 75% = 45, personal 25% = 15.
-function totalPostsForScope(scope: BatchScope, daysInMonth: number): number {
-  const both = Math.min(60, daysInMonth * 2);
+// inside a "both" batch of the same size: at 60, company 75% = 45 and
+// personal 25% = 15; at 30, 23 and 8.
+function totalPostsForScope(
+  scope: BatchScope,
+  daysInMonth: number,
+  postCount: number
+): number {
+  const both = Math.min(postCount, daysInMonth * 2);
   const share = categoriesForScope(scope).reduce(
     (sum, category) => sum + CATEGORY_MIX[category],
     0
   );
-  return Math.round(both * share);
+  return Math.max(1, Math.round(both * share));
 }
 
 // Largest-remainder apportionment, so the per-category counts always sum to
@@ -269,10 +278,12 @@ function buildSchedule(
     post_number: number;
   }> = [];
 
-  let postNumber = 1;
   const daysInMonth = new Date(year, month, 0).getDate();
 
-  for (let day = 1; day <= daysInMonth && postNumber <= maxPosts; day++) {
+  // Every slot the month offers — morning and afternoon on every day.
+  const allSlots: Array<Omit<(typeof schedule)[number], "post_number">> = [];
+
+  for (let day = 1; day <= daysInMonth; day++) {
     const date = new Date(year, month - 1, day);
     const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const weekend = isWeekend(date);
@@ -284,25 +295,27 @@ function buildSchedule(
       ? settings.weekend_afternoon_time
       : settings.weekday_afternoon_time;
 
-    // Morning post
-    schedule.push({
+    allSlots.push({
       scheduled_date: dateStr,
       time_slot: "morning",
       scheduled_time_1: morningTime,
       scheduled_time_2: afternoonTime,
-      post_number: postNumber++,
     });
+    allSlots.push({
+      scheduled_date: dateStr,
+      time_slot: "afternoon",
+      scheduled_time_1: morningTime,
+      scheduled_time_2: afternoonTime,
+    });
+  }
 
-    // Afternoon post
-    if (postNumber <= maxPosts) {
-      schedule.push({
-        scheduled_date: dateStr,
-        time_slot: "afternoon",
-        scheduled_time_1: morningTime,
-        scheduled_time_2: afternoonTime,
-        post_number: postNumber++,
-      });
-    }
+  const wanted = Math.min(maxPosts, allSlots.length);
+
+  // Pick slots at an even stride instead of taking the first N. Front-loading
+  // would cram a 30-post batch into the first half of the month.
+  for (let i = 0; i < wanted; i++) {
+    const slotIndex = Math.floor((i * allSlots.length) / wanted);
+    schedule.push({ ...allSlots[slotIndex], post_number: i + 1 });
   }
 
   return schedule;
@@ -486,6 +499,7 @@ export async function POST(request: NextRequest) {
       testMode,
       includeImages = true,
       scope: rawScope = "both",
+      postCount: rawPostCount = DEFAULT_POST_COUNT,
     } = await request.json();
 
     if (!month || !year || month < 1 || month > 12) {
@@ -502,6 +516,16 @@ export async function POST(request: NextRequest) {
       );
     }
     const scope = rawScope as BatchScope;
+
+    const postCount = Number(rawPostCount);
+    if (!POST_COUNT_PRESETS.includes(postCount)) {
+      return NextResponse.json(
+        {
+          error: `Invalid postCount: ${rawPostCount}. Expected one of ${POST_COUNT_PRESETS.join(", ")}.`,
+        },
+        { status: 400 }
+      );
+    }
 
     // Scope picks the categories; test mode then takes 2 from each of them.
     const categoriesToGenerate: ContentCategory[] = categoriesForScope(scope);
@@ -533,11 +557,20 @@ export async function POST(request: NextRequest) {
     const daysInMonth = new Date(year, month, 0).getDate();
     const totalPosts = testMode
       ? categoriesToGenerate.length * 2
-      : totalPostsForScope(scope, daysInMonth);
+      : totalPostsForScope(scope, daysInMonth, postCount);
 
     const { data: batchData, error: batchError } = await supabase
       .from("batches")
-      .insert({ month, year, status: "draft", total_posts: totalPosts, scope })
+      .insert({
+        month,
+        year,
+        status: "draft",
+        total_posts: totalPosts,
+        scope,
+        // The size chosen in the dialog. Test batches have no chosen size, so
+        // they record what they actually produced.
+        post_count: testMode ? totalPosts : postCount,
+      })
       .select()
       .single();
 

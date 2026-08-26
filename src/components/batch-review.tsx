@@ -726,7 +726,14 @@ export function BatchReview({
               </Badge>
             </div>
             <p className="text-sm text-gray-500 mt-0.5">
-              {batch.total_posts} posts &middot; Created{" "}
+              {batch.total_posts} posts
+              {/* post_count is the size chosen in the dialog. It differs from
+                  total_posts on a scoped batch, and is absent on batches made
+                  before the column existed. */}
+              {batch.post_count && batch.post_count !== batch.total_posts
+                ? ` (size ${batch.post_count})`
+                : ""}{" "}
+              &middot; Created{" "}
               {new Date(batch.created_at).toLocaleDateString()}
             </p>
           </div>

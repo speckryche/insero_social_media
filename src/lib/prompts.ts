@@ -1,4 +1,5 @@
 import { DEFAULT_ENABLED_PLATFORMS, type Platform } from "@/lib/platforms";
+import { headlinesForCategory, type HeadlineItem } from "@/lib/headlines";
 
 export const INSERO_SYSTEM_PROMPT = `You are a social media content writer for Insero, a technology brokerage based in the Pacific Northwest. The owner is Speck Hansen.
 
@@ -274,6 +275,7 @@ export interface CategoryPromptOptions {
   speckIsms?: string | null;
   styleSamples?: string | null;
   enabledPlatforms?: Platform[];
+  headlines?: HeadlineItem[];
 }
 
 export function buildCategoryPrompt(
@@ -281,12 +283,41 @@ export function buildCategoryPrompt(
   postCount: number = 12,
   options: CategoryPromptOptions = {}
 ): string {
-  const { speckIsms, styleSamples, enabledPlatforms } = options;
+  const { speckIsms, styleSamples, enabledPlatforms, headlines } = options;
   const enabled = enabledPlatforms?.length
     ? enabledPlatforms
     : DEFAULT_ENABLED_PLATFORMS;
   const hasImages = IMAGE_CATEGORIES.includes(category);
   const isPersonalTake = category === "personal_take";
+
+  // Only tech_speak and personal_take draw on headlines, and only from the
+  // feeds that suit them. Everything else never sees the list.
+  const categoryHeadlines = headlinesForCategory(category, headlines || []);
+  const hasHeadlines = categoryHeadlines.length > 0;
+
+  const headlineUsageNote = isPersonalTake
+    ? 'Crypto headlines belong in the "Crypto, sparked" bucket. AI and tech headlines can feed "Built this week" or "Awkward moments" when they genuinely fit.'
+    : "Translate the headline in the Telecom-speak / Human-speak format above — the jargon or announcement first, then what it actually means for a business.";
+
+  const headlinesBlock = hasHeadlines
+    ? `
+CURRENT HEADLINES — real, recent stories the user picked for this batch:
+${categoryHeadlines
+  .map(
+    (item, i) =>
+      `${i + 1}. [${item.feed}] ${item.headline}${
+        item.summary ? `\n   ${item.summary}` : ""
+      }${item.source_name ? `\n   Source: ${item.source_name}` : ""}${
+        item.published_date ? ` (${item.published_date})` : ""
+      }`
+  )
+  .join("\n")}
+
+Only reference events from the headlines list. Never invent events. Never quote statistics from them.
+${headlineUsageNote}
+Use roughly one headline per post at most, and do not force one into every post — a post with no headline is fine. When a post uses one, set "headline_index" to that headline's number above. When it does not, set "headline_index" to null.
+`
+    : "";
 
   // Style samples are real posts in Speck's own hand — the strongest signal
   // available for the register. They sit after the rules and before the bucket
@@ -436,15 +467,17 @@ What's the trickiest thing you've run into with carrier quotes?"`,
     .map((entry) => `  "${entry.field}": "..."`)
     .join(",\n");
 
+  const headlineFieldJson = hasHeadlines ? `,\n  "headline_index": null` : "";
+
   return `${categoryPrompt}
-${voiceBBlock}${companyVoiceRule}
+${voiceBBlock}${companyVoiceRule}${headlinesBlock}
 For each of the ${postCount} posts, generate ${versionCount} platform-specific version${platformRules.length === 1 ? "" : "s"}:
 
 ${numberedRules}
 ${imageFields}
 Respond with a JSON array of ${postCount} objects. Each object must have exactly these fields:
 {
-${jsonFields}${imageFieldsJson}
+${jsonFields}${imageFieldsJson}${headlineFieldJson}
 }
 
 Use \\n for line breaks inside string values. Never emit a raw newline inside a string.

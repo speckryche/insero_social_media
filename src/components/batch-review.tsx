@@ -50,6 +50,7 @@ import {
   ChevronUp,
   Sparkles,
   BookmarkPlus,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1112,6 +1113,18 @@ export function BatchReview({
                   )}
                 </div>
                 <div className="flex items-center gap-1.5">
+                  {post.headline_source_url && (
+                    <a
+                      href={post.headline_source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={post.headline_text || "Source"}
+                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Source
+                    </a>
+                  )}
                   <Badge className={`text-xs ${STATUS_STYLES[post.status] || ""}`}>
                     {post.status.charAt(0).toUpperCase() + post.status.slice(1)}
                   </Badge>

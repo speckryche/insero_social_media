@@ -21,7 +21,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Plus, Sparkles } from "lucide-react";
+import { Loader2, Plus, Sparkles, Newspaper, ExternalLink } from "lucide-react";
+import {
+  HEADLINE_FEEDS,
+  FEED_LABELS,
+  type HeadlineItem,
+} from "@/lib/headlines";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -74,6 +79,39 @@ export function GenerateBatchModal() {
   const [loading, setLoading] = useState(false);
   const [progressIndex, setProgressIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanId, setScanId] = useState<string | null>(null);
+  const [headlines, setHeadlines] = useState<HeadlineItem[]>([]);
+  // Nothing is used unless it is ticked — headlines are opt-in per item.
+  const [pickedIds, setPickedIds] = useState<string[]>([]);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  async function handleScanHeadlines() {
+    setScanning(true);
+    setScanError(null);
+    try {
+      const res = await fetch("/api/headlines/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: parseInt(month), year: parseInt(year) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Scan failed");
+      setHeadlines(data.items || []);
+      setScanId(data.scanId || null);
+      setPickedIds([]);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  function togglePicked(id: string) {
+    setPickedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
 
   async function handleGenerate() {
     setLoading(true);
@@ -88,6 +126,15 @@ export function GenerateBatchModal() {
     }, 60000);
 
     try {
+      // Persist the picks on the scan row before generating.
+      if (scanId && pickedIds.length > 0) {
+        await fetch("/api/headlines/scan", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scanId, headlineIds: pickedIds }),
+        }).catch(() => {});
+      }
+
       const res = await fetch("/api/generate-batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -98,6 +145,8 @@ export function GenerateBatchModal() {
           includeImages,
           scope,
           postCount: parseInt(postCount),
+          scanId,
+          headlineIds: pickedIds,
         }),
       });
 
@@ -202,6 +251,95 @@ export function GenerateBatchModal() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* Headlines — optional. Scanned on demand, and only the items
+                  ticked here reach the prompt. */}
+              <div className="space-y-2 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-sm font-medium">Headlines</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleScanHeadlines}
+                    disabled={scanning}
+                  >
+                    {scanning ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <Newspaper className="h-4 w-4 mr-1.5 text-blue-600" />
+                    )}
+                    {scanning
+                      ? "Scanning…"
+                      : headlines.length > 0
+                      ? "Rescan"
+                      : "Scan headlines"}
+                  </Button>
+                </div>
+
+                {scanError && (
+                  <p className="text-xs text-red-600">{scanError}</p>
+                )}
+
+                {headlines.length === 0 ? (
+                  <p className="text-xs text-gray-400">
+                    Optional. Finds recent crypto, AI/tech, and AI-in-voice
+                    stories so posts can reference real events instead of
+                    inventing them. Nothing is used unless you tick it.
+                  </p>
+                ) : (
+                  <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                    {HEADLINE_FEEDS.filter((feed) =>
+                      headlines.some((h) => h.feed === feed)
+                    ).map((feed) => (
+                      <div key={feed} className="space-y-1.5">
+                        <p className="text-xs font-medium uppercase text-gray-400">
+                          {FEED_LABELS[feed]}
+                        </p>
+                        {headlines
+                          .filter((h) => h.feed === feed)
+                          .map((item) => (
+                            <div key={item.id} className="flex gap-2">
+                              <Checkbox
+                                id={`headline-${item.id}`}
+                                checked={pickedIds.includes(item.id)}
+                                onCheckedChange={() => togglePicked(item.id)}
+                                className="mt-0.5"
+                              />
+                              <Label
+                                htmlFor={`headline-${item.id}`}
+                                className="text-xs font-normal cursor-pointer leading-snug"
+                              >
+                                {item.headline}
+                                <span className="block text-gray-400">
+                                  {item.source_name || "Unknown source"}
+                                  {item.published_date
+                                    ? ` · ${item.published_date}`
+                                    : ""}
+                                  {item.source_url && (
+                                    <a
+                                      href={item.source_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="ml-1 inline-flex items-center text-blue-600 hover:underline"
+                                    >
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  )}
+                                </span>
+                              </Label>
+                            </div>
+                          ))}
+                      </div>
+                    ))}
+                    <p className="text-xs text-gray-400 pt-1">
+                      {pickedIds.length} picked. Used by Tech Speak and Personal
+                      Take only.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Batch size. Test mode ignores it, so it's hidden there. */}

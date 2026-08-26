@@ -16,6 +16,11 @@ import {
   stripCodeFences,
   escapeRawControlCharsInStrings,
 } from "@/lib/json-repair";
+import {
+  headlinesForCategory,
+  isHeadlineItem,
+  type HeadlineItem,
+} from "@/lib/headlines";
 
 // Read content skill file as the single source of truth for post generation
 const CONTENT_SKILL = readFileSync(
@@ -147,6 +152,8 @@ interface GeneratedPost {
   image_body?: string;
   image_stat_number?: string;
   image_stat_label?: string;
+  // 1-based index into the headlines shown to this category, or null.
+  headline_index?: number | null;
 }
 
 function assignImageTemplate(
@@ -349,6 +356,7 @@ interface GenerationGuidance {
   speckIsms?: string;
   styleSamples?: string;
   enabledPlatforms?: Platform[];
+  headlines?: HeadlineItem[];
 }
 
 async function generateCategoryPosts(
@@ -397,6 +405,7 @@ async function generateCategoryPosts(
             speckIsms: guidance.speckIsms,
             styleSamples: guidance.styleSamples,
             enabledPlatforms: guidance.enabledPlatforms,
+            headlines: guidance.headlines,
           }),
         },
       ],
@@ -446,6 +455,8 @@ async function generateCategoryPosts(
     x_content: post.x_content ?? "",
     facebook_content: post.facebook_content ?? "",
     google_content: post.google_content ?? "",
+    headline_index:
+      typeof post.headline_index === "number" ? post.headline_index : null,
   }));
 }
 
@@ -495,6 +506,8 @@ export async function POST(request: NextRequest) {
       includeImages = true,
       scope: rawScope = "both",
       postCount: rawPostCount = DEFAULT_POST_COUNT,
+      scanId,
+      headlineIds,
     } = await request.json();
 
     if (!month || !year || month < 1 || month > 12) {
@@ -593,12 +606,36 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Generate posts — one category at a time
+    // Picked headlines, if the user ran a scan. Falls back to the latest scan
+    // for this month when the dialog sent ids but no scan id.
+    let pickedHeadlines: HeadlineItem[] = [];
+    if (Array.isArray(headlineIds) && headlineIds.length > 0) {
+      let scanQuery = supabase.from("headline_scans").select("id, items");
+      scanQuery = scanId
+        ? scanQuery.eq("id", scanId)
+        : scanQuery
+            .eq("month", month)
+            .eq("year", year)
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+      const { data: scans } = await scanQuery;
+      const items = ((scans?.[0]?.items as HeadlineItem[]) || []).filter(
+        isHeadlineItem
+      );
+      pickedHeadlines = items.filter((item) => headlineIds.includes(item.id));
+      console.log(
+        `[generate-batch] using ${pickedHeadlines.length} picked headlines`
+      );
+    }
+
     const enabledPlatforms = parseEnabledPlatforms(settings.enabled_platforms);
     const guidance: GenerationGuidance = {
       contentNotes: settings.content_notes || "",
       bannedWords: settings.banned_words || "",
       speckIsms: settings.speck_isms || "",
       styleSamples: settings.style_samples || "",
+      headlines: pickedHeadlines,
       enabledPlatforms,
     };
     console.log(
@@ -625,8 +662,19 @@ export async function POST(request: NextRequest) {
     // 5. Build schedule
     const schedule = buildSchedule(month, year, settings, totalPosts);
 
-    // 6. Trim posts to fit available schedule slots (shorter months have fewer days)
-    const postsToSchedule = interleaved.slice(0, schedule.length);
+    // 6. Trim posts to fit available schedule slots (shorter months have fewer
+    //    days). Posts that reference a headline go first — news gets stale, so
+    //    it takes the earliest slots in the month. Order is otherwise the
+    //    interleave order, which keeps categories varied within each group.
+    const usesHeadline = (item: (typeof interleaved)[number]) =>
+      headlinesForCategory(item.category, pickedHeadlines).length > 0 &&
+      typeof item.post.headline_index === "number";
+
+    const ordered = [
+      ...interleaved.filter(usesHeadline),
+      ...interleaved.filter((item) => !usesHeadline(item)),
+    ];
+    const postsToSchedule = ordered.slice(0, schedule.length);
 
     // Test mode template assignments: map category + index-in-category to a specific template
     const TEST_MODE_TEMPLATES: Record<string, ImageTemplateType[]> = {
@@ -644,6 +692,24 @@ export async function POST(request: NextRequest) {
     // When includeImages is false, every post is forced text-only and all
     // image-related columns are nulled out — the assignImageTemplate path
     // is skipped entirely.
+    // Resolve a post's 1-based headline_index back to the item it referred to.
+    // The index is scoped to the headlines that category was shown.
+    const headlineColumnsFor = (
+      category: ContentCategory,
+      post: GeneratedPost
+    ): { headline_source_url: string | null; headline_text: string | null } => {
+      const forCategory = headlinesForCategory(category, pickedHeadlines);
+      const index = post.headline_index;
+      if (typeof index !== "number" || index < 1 || index > forCategory.length) {
+        return { headline_source_url: null, headline_text: null };
+      }
+      const item = forCategory[index - 1];
+      return {
+        headline_source_url: item.source_url || null,
+        headline_text: item.headline || null,
+      };
+    };
+
     const postsToInsert = postsToSchedule.map((item, index) => {
       const sched = schedule[index];
 
@@ -720,6 +786,7 @@ export async function POST(request: NextRequest) {
         image_stat_number: includeImages ? (item.post.image_stat_number || null) : null,
         image_stat_label: includeImages ? (item.post.image_stat_label || null) : null,
         status: "draft",
+        ...headlineColumnsFor(item.category, item.post),
       };
     });
 

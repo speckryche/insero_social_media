@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import {
   buildCategoryPrompt,
+  parseListSetting,
   ContentCategory,
 } from "@/lib/prompts";
 
@@ -394,15 +395,31 @@ function escapeRawControlCharsInStrings(text: string): string {
   return out;
 }
 
+// The editable lists from app_settings, plus the free-text notes. All three
+// are stored as plain text and read at generation time.
+interface GenerationGuidance {
+  contentNotes?: string;
+  bannedWords?: string;
+  speckIsms?: string;
+}
+
 async function generateCategoryPosts(
   anthropic: Anthropic,
   category: ContentCategory,
-  contentNotes?: string,
-  postCount: number = 12
+  postCount: number = 12,
+  guidance: GenerationGuidance = {}
 ): Promise<GeneratedPost[]> {
-  const systemPrompt = contentNotes
-    ? `${SYSTEM_PROMPT}\n\nADDITIONAL GUIDANCE FROM THE USER:\n${contentNotes}`
-    : SYSTEM_PROMPT;
+  let systemPrompt = SYSTEM_PROMPT;
+
+  // Banned words apply to every category, so they ride the system prompt.
+  const bannedWords = parseListSetting(guidance.bannedWords);
+  if (bannedWords.length > 0) {
+    systemPrompt += `\n\nNever use any of these words or phrases: ${bannedWords.join(", ")}.`;
+  }
+
+  if (guidance.contentNotes) {
+    systemPrompt += `\n\nADDITIONAL GUIDANCE FROM THE USER:\n${guidance.contentNotes}`;
+  }
 
   // Test-mode batches ask for 2 posts per category; full batches ask for many
   // more. The ceiling has to cover thinking tokens as well as the JSON —
@@ -428,7 +445,7 @@ async function generateCategoryPosts(
       messages: [
         {
           role: "user",
-          content: buildCategoryPrompt(category, postCount),
+          content: buildCategoryPrompt(category, postCount, guidance.speckIsms),
         },
       ],
     })
@@ -594,7 +611,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Generate posts — one category at a time
-    const contentNotes = settings.content_notes || "";
+    const guidance: GenerationGuidance = {
+      contentNotes: settings.content_notes || "",
+      bannedWords: settings.banned_words || "",
+      speckIsms: settings.speck_isms || "",
+    };
     const postsByCategory = new Map<ContentCategory, GeneratedPost[]>();
 
     // Per-category counts: flat 2 each in test mode, otherwise apportioned
@@ -606,7 +627,7 @@ export async function POST(request: NextRequest) {
     for (const category of categoriesToGenerate) {
       const count = categoryCounts.get(category) ?? 0;
       if (count === 0) continue;
-      const posts = await generateCategoryPosts(anthropic, category, contentNotes, count);
+      const posts = await generateCategoryPosts(anthropic, category, count, guidance);
       postsByCategory.set(category, posts);
     }
 

@@ -250,9 +250,32 @@ export type ImageCategory = "bill_speak" | "contract_speak" | "quote_speak" | "t
 
 const IMAGE_CATEGORIES: ContentCategory[] = ["bill_speak", "contract_speak", "quote_speak", "tech_speak"];
 
-export function buildCategoryPrompt(category: ContentCategory, postCount: number = 12): string {
+// Settings textareas hold one entry per line. Blank lines and stray spacing
+// are the user's, not the model's problem.
+export function parseListSetting(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+export function buildCategoryPrompt(
+  category: ContentCategory,
+  postCount: number = 12,
+  speckIsms?: string | null
+): string {
   const hasImages = IMAGE_CATEGORIES.includes(category);
   const isPersonalTake = category === "personal_take";
+
+  // Speck-isms are Voice B habits, so they only reach personal_take.
+  const speckIsmsList = isPersonalTake ? parseListSetting(speckIsms) : [];
+  const speckIsmsBlock = speckIsmsList.length
+    ? `
+Speck's habits of speech — use these as habits, not as lines to copy:
+${speckIsmsList.map((item) => `- ${item}`).join("\n")}
+`
+    : "";
 
   // personal_take is the only category that reaches Speck's profile, so it
   // carries the Voice B bucket rotation, the facts list, and the crypto rules.
@@ -265,7 +288,7 @@ ${buildBucketAssignments(postCount)}
 ${SPECK_FACTS}
 
 ${CRYPTO_RESTRICTIONS}
-`
+${speckIsmsBlock}`
     : "";
 
   // The four _speak categories are company-page voice. Voice A is plural and

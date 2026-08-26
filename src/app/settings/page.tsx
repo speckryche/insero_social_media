@@ -54,6 +54,8 @@ export default function SettingsPage() {
   const [weekendAfternoon, setWeekendAfternoon] = useState("15:00");
   const [postsPerDay, setPostsPerDay] = useState("2");
   const [contentNotes, setContentNotes] = useState("");
+  const [bannedWords, setBannedWords] = useState("");
+  const [speckIsms, setSpeckIsms] = useState("");
   const [linkedinAuthorType, setLinkedinAuthorType] = useState("organization");
   const [autoPublishPersonal, setAutoPublishPersonal] = useState(false);
 
@@ -73,6 +75,8 @@ export default function SettingsPage() {
           );
           setPostsPerDay(String(data.posts_per_day || 2));
           setContentNotes(data.content_notes || "");
+          setBannedWords(data.banned_words || "");
+          setSpeckIsms(data.speck_isms || "");
           setLinkedinAuthorType(data.linkedin_author_type || "organization");
           setAutoPublishPersonal(data.auto_publish_personal || false);
         }
@@ -97,6 +101,8 @@ export default function SettingsPage() {
           weekend_afternoon_time: weekendAfternoon + ":00",
           posts_per_day: parseInt(postsPerDay),
           content_notes: contentNotes,
+          banned_words: bannedWords,
+          speck_isms: speckIsms,
           linkedin_author_type: linkedinAuthorType,
           auto_publish_personal: autoPublishPersonal,
         }),
@@ -272,6 +278,38 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400">
               These notes are included in the AI prompt when generating new
               batches.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Banned Words</Label>
+            <Textarea
+              value={bannedWords}
+              onChange={(e) => setBannedWords(e.target.value)}
+              rows={6}
+              placeholder={"genuinely\nhonestly\nleverage"}
+              className="text-sm font-mono"
+            />
+            <p className="text-xs text-gray-400">
+              One word or phrase per line. Every post in every category is told
+              never to use them.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Speck-isms</Label>
+            <Textarea
+              value={speckIsms}
+              onChange={(e) => setSpeckIsms(e.target.value)}
+              rows={6}
+              placeholder={
+                'gives nicknames to tools and people he likes ("my BFF Claude")\none exclamation point when something made his day'
+              }
+              className="text-sm"
+            />
+            <p className="text-xs text-gray-400">
+              One habit per line. Used for Personal Take posts only, as habits
+              of speech rather than lines to copy.
             </p>
           </div>
 

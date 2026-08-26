@@ -21,6 +21,10 @@ import {
 } from "@/components/ui/select";
 import { Loader2, Save } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DEFAULT_ENABLED_PLATFORMS,
+  type Platform,
+} from "@/lib/platforms";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Post = any;
@@ -29,9 +33,15 @@ interface PostEditSheetProps {
   post: Post;
   onClose: () => void;
   onSave: (updated: Post) => void;
+  enabledPlatforms?: Platform[];
 }
 
-export function PostEditSheet({ post, onClose, onSave }: PostEditSheetProps) {
+export function PostEditSheet({
+  post,
+  onClose,
+  onSave,
+  enabledPlatforms = DEFAULT_ENABLED_PLATFORMS,
+}: PostEditSheetProps) {
   const [linkedinPersonal, setLinkedinPersonal] = useState(post.linkedin_personal_content || "");
   const [linkedin, setLinkedin] = useState(post.linkedin_content || "");
   const [xContent, setXContent] = useState(post.x_content || "");
@@ -250,6 +260,7 @@ export function PostEditSheet({ post, onClose, onSave }: PostEditSheetProps) {
             </div>
 
             {/* X (Twitter) */}
+            {enabledPlatforms.includes("x") && (
             <div className="space-y-2">
               <Label>X (Twitter)</Label>
               <Textarea
@@ -266,8 +277,10 @@ export function PostEditSheet({ post, onClose, onSave }: PostEditSheetProps) {
                 {xContent.length}/280 characters
               </p>
             </div>
+            )}
 
             {/* Facebook */}
+            {enabledPlatforms.includes("facebook") && (
             <div className="space-y-2">
               <Label>Facebook</Label>
               <Textarea
@@ -280,8 +293,10 @@ export function PostEditSheet({ post, onClose, onSave }: PostEditSheetProps) {
                 {facebook.length} characters
               </p>
             </div>
+            )}
 
             {/* Google Business */}
+            {enabledPlatforms.includes("google") && (
             <div className="space-y-2">
               <Label>Google Business Profile</Label>
               <Textarea
@@ -294,6 +309,7 @@ export function PostEditSheet({ post, onClose, onSave }: PostEditSheetProps) {
                 {google.length} characters
               </p>
             </div>
+            )}
           </div>
         </ScrollArea>
 

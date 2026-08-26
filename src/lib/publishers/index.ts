@@ -4,6 +4,11 @@ import * as x from "./x";
 import * as facebook from "./facebook";
 import * as googleBusiness from "./google";
 import { PublishResult } from "./types";
+import {
+  OPTIONAL_PLATFORMS,
+  parseEnabledPlatforms,
+  type Platform,
+} from "@/lib/platforms";
 
 export type { PublishResult };
 
@@ -48,7 +53,7 @@ export interface PublishPostResult {
   linkedin_personal?: PublishResult;
 }
 
-type Platform = "linkedin" | "x" | "facebook" | "google";
+// Platform is imported from @/lib/platforms — same union, single source.
 
 async function logResult(
   postId: string,
@@ -63,6 +68,29 @@ async function logResult(
     post_id_returned: result.postId || null,
     error_message: result.error || null,
   });
+}
+
+
+// Reads the enabled-platform toggle. Nothing here removes a publisher — a
+// disabled platform is skipped and logged, and flipping it back on in
+// Settings restores it with no code change.
+async function getEnabledPlatforms(): Promise<Platform[]> {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from("app_settings")
+    .select("enabled_platforms")
+    .single();
+  return parseEnabledPlatforms(data?.enabled_platforms);
+}
+
+function logSkippedPlatforms(context: string, enabled: Platform[]) {
+  const skipped = OPTIONAL_PLATFORMS.filter((p) => !enabled.includes(p));
+  if (skipped.length > 0) {
+    console.log(
+      `[${context}] skipping disabled platforms: ${skipped.join(", ")} ` +
+      `(enable them in Settings > Enabled Platforms)`
+    );
+  }
 }
 
 export async function publishPost(post: PostData): Promise<PublishPostResult> {
@@ -91,6 +119,7 @@ export async function publishPost(post: PostData): Promise<PublishPostResult> {
   console.log(
     `[publishPost] post=${post.id} wantsCompany=${wantsCompany} wantsPersonal=${wantsPersonal}`
   );
+  logSkippedPlatforms("publishPost", await getEnabledPlatforms());
 
   // Run the two LinkedIn variants in parallel — failures are isolated. X,
   // Facebook, and Google publishers are not called at all in this build.
@@ -230,20 +259,35 @@ export async function retryFailedPlatforms(
   const facebookImage = post.has_image && post.facebook_image_url ? post.facebook_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
   const googleImage = post.has_image && post.google_image_url ? post.google_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
 
-  // Only retry platforms that failed
+  // Only retry platforms that failed — and only ones that are switched on.
+  // A disabled platform reports success so it neither blocks the post nor
+  // gets marked failed; the publisher itself is untouched and comes straight
+  // back when the toggle is flipped in Settings.
+  const enabled = await getEnabledPlatforms();
+  logSkippedPlatforms("retryFailedPlatforms", enabled);
+
+  const skipDisabled = (platform: Platform): PublishResult | null =>
+    enabled.includes(platform) ? null : { success: true, postId: undefined };
+
   const results: PublishAllResult = {
     linkedin: post.linkedin_published
       ? { success: true, postId: undefined }
       : await linkedin.publish(post.linkedin_content, linkedinImage),
-    x: post.x_published
-      ? { success: true, postId: undefined }
-      : await x.publish(post.x_content, xImage),
-    facebook: post.facebook_published
-      ? { success: true, postId: undefined }
-      : await facebook.publish(post.facebook_content, facebookImage),
-    google: post.google_published
-      ? { success: true, postId: undefined }
-      : await googleBusiness.publish(post.google_content, googleImage),
+    x:
+      skipDisabled("x") ??
+      (post.x_published
+        ? { success: true, postId: undefined }
+        : await x.publish(post.x_content, xImage)),
+    facebook:
+      skipDisabled("facebook") ??
+      (post.facebook_published
+        ? { success: true, postId: undefined }
+        : await facebook.publish(post.facebook_content, facebookImage)),
+    google:
+      skipDisabled("google") ??
+      (post.google_published
+        ? { success: true, postId: undefined }
+        : await googleBusiness.publish(post.google_content, googleImage)),
   };
 
   // Log retried platforms

@@ -7,6 +7,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DEFAULT_ENABLED_PLATFORMS,
+  OPTIONAL_PLATFORMS,
+  type Platform,
+} from "@/lib/platforms";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -15,9 +20,18 @@ type Post = any;
 interface PostPreviewModalProps {
   post: Post;
   onClose: () => void;
+  enabledPlatforms?: Platform[];
 }
 
-export function PostPreviewModal({ post, onClose }: PostPreviewModalProps) {
+export function PostPreviewModal({
+  post,
+  onClose,
+  enabledPlatforms = DEFAULT_ENABLED_PLATFORMS,
+}: PostPreviewModalProps) {
+  // Personal + Company are always shown; the rest follow the toggle.
+  const extraPlatforms = OPTIONAL_PLATFORMS.filter((p) =>
+    enabledPlatforms.includes(p)
+  );
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-lg max-h-[85vh]">
@@ -28,12 +42,23 @@ export function PostPreviewModal({ post, onClose }: PostPreviewModalProps) {
         </DialogHeader>
 
         <Tabs defaultValue="linkedin-personal" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 h-9">
+          <TabsList
+            className="grid w-full h-9"
+            style={{
+              gridTemplateColumns: `repeat(${2 + extraPlatforms.length}, minmax(0, 1fr))`,
+            }}
+          >
             <TabsTrigger value="linkedin-personal" className="text-xs">Personal</TabsTrigger>
             <TabsTrigger value="linkedin-company" className="text-xs">Company</TabsTrigger>
-            <TabsTrigger value="x" className="text-xs">X</TabsTrigger>
-            <TabsTrigger value="facebook" className="text-xs">Facebook</TabsTrigger>
-            <TabsTrigger value="google" className="text-xs">Google</TabsTrigger>
+            {extraPlatforms.includes("x") && (
+              <TabsTrigger value="x" className="text-xs">X</TabsTrigger>
+            )}
+            {extraPlatforms.includes("facebook") && (
+              <TabsTrigger value="facebook" className="text-xs">Facebook</TabsTrigger>
+            )}
+            {extraPlatforms.includes("google") && (
+              <TabsTrigger value="google" className="text-xs">Google</TabsTrigger>
+            )}
           </TabsList>
 
           <ScrollArea className="h-[50vh] mt-3">
@@ -85,6 +110,7 @@ export function PostPreviewModal({ post, onClose }: PostPreviewModalProps) {
               </div>
             </TabsContent>
 
+            {extraPlatforms.includes("x") && (
             <TabsContent value="x" className="mt-0">
               <div className="bg-white border rounded-2xl p-4 space-y-2">
                 <div className="flex items-center gap-2">
@@ -119,7 +145,9 @@ export function PostPreviewModal({ post, onClose }: PostPreviewModalProps) {
                 </div>
               </div>
             </TabsContent>
+            )}
 
+            {extraPlatforms.includes("facebook") && (
             <TabsContent value="facebook" className="mt-0">
               <div className="bg-white border rounded-lg overflow-hidden">
                 <div className="flex items-center gap-3 p-3 border-b">
@@ -145,7 +173,9 @@ export function PostPreviewModal({ post, onClose }: PostPreviewModalProps) {
                 </div>
               </div>
             </TabsContent>
+            )}
 
+            {extraPlatforms.includes("google") && (
             <TabsContent value="google" className="mt-0">
               <div className="bg-white border rounded-lg p-4 space-y-3">
                 <div className="flex items-center gap-2">
@@ -171,6 +201,7 @@ export function PostPreviewModal({ post, onClose }: PostPreviewModalProps) {
                 )}
               </div>
             </TabsContent>
+            )}
           </ScrollArea>
         </Tabs>
       </DialogContent>

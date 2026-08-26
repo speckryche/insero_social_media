@@ -54,6 +54,11 @@ import { useRouter } from "next/navigation";
 import { Switch } from "@/components/ui/switch";
 import { PostEditSheet } from "@/components/post-edit-sheet";
 import { PostPreviewModal } from "@/components/post-preview-modal";
+import {
+  DEFAULT_ENABLED_PLATFORMS,
+  OPTIONAL_PLATFORMS,
+  type Platform,
+} from "@/lib/platforms";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -155,6 +160,7 @@ type Batch = any;
 interface BatchReviewProps {
   initialBatch: Batch;
   initialPosts: Post[];
+  enabledPlatforms?: Platform[];
 }
 
 function getWeekNumber(dateStr: string): number {
@@ -229,7 +235,16 @@ function CopyButton({ text, label }: { text: string | null | undefined; label: s
   );
 }
 
-export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
+export function BatchReview({
+  initialBatch,
+  initialPosts,
+  enabledPlatforms = DEFAULT_ENABLED_PLATFORMS,
+}: BatchReviewProps) {
+  // The optional platforms that are switched on. When none are, the whole
+  // tab row goes away and a card is just the two LinkedIn variants.
+  const extraPlatforms = OPTIONAL_PLATFORMS.filter((p) =>
+    enabledPlatforms.includes(p)
+  );
   const router = useRouter();
   const [batch, setBatch] = useState<Batch>(initialBatch);
   const [posts, setPosts] = useState<Post[]>(initialPosts);
@@ -1183,18 +1198,31 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
               </div>
 
               {/* Other platform tabs */}
-              <Tabs defaultValue="x" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 h-8">
-                  <TabsTrigger value="x" className="text-xs">
-                    X
-                  </TabsTrigger>
-                  <TabsTrigger value="facebook" className="text-xs">
-                    Facebook
-                  </TabsTrigger>
-                  <TabsTrigger value="google" className="text-xs">
-                    Google
-                  </TabsTrigger>
+              {extraPlatforms.length > 0 && (
+              <Tabs defaultValue={extraPlatforms[0]} className="w-full">
+                <TabsList
+                  className="grid w-full h-8"
+                  style={{
+                    gridTemplateColumns: `repeat(${extraPlatforms.length}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {extraPlatforms.includes("x") && (
+                    <TabsTrigger value="x" className="text-xs">
+                      X
+                    </TabsTrigger>
+                  )}
+                  {extraPlatforms.includes("facebook") && (
+                    <TabsTrigger value="facebook" className="text-xs">
+                      Facebook
+                    </TabsTrigger>
+                  )}
+                  {extraPlatforms.includes("google") && (
+                    <TabsTrigger value="google" className="text-xs">
+                      Google
+                    </TabsTrigger>
+                  )}
                 </TabsList>
+                {extraPlatforms.includes("x") && (
                 <TabsContent value="x" className="mt-3">
                   <div className="flex justify-end -mt-1 mb-1">
                     <CopyButton text={post.x_content} label="X" />
@@ -1206,6 +1234,8 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                     {post.x_content?.length || 0}/280 characters
                   </p>
                 </TabsContent>
+                )}
+                {extraPlatforms.includes("facebook") && (
                 <TabsContent value="facebook" className="mt-3">
                   <div className="flex justify-end -mt-1 mb-1">
                     <CopyButton text={post.facebook_content} label="Facebook" />
@@ -1214,6 +1244,8 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                     {post.facebook_content}
                   </p>
                 </TabsContent>
+                )}
+                {extraPlatforms.includes("google") && (
                 <TabsContent value="google" className="mt-3">
                   <div className="flex justify-end -mt-1 mb-1">
                     <CopyButton text={post.google_content} label="Google" />
@@ -1222,13 +1254,15 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
                     {post.google_content}
                   </p>
                 </TabsContent>
+                )}
               </Tabs>
+              )}
 
               {/* Platform publish status for published/failed posts */}
               {(post.status === "published" || post.status === "failed") && (
                 <div className="flex items-center gap-3 mt-3 pt-3 border-t">
                   <span className="text-xs text-gray-500 mr-1">Platforms:</span>
-                  {(["linkedin", "x", "facebook", "google"] as const).map(
+                  {enabledPlatforms.map(
                     (platform) => (
                       <div
                         key={platform}
@@ -1411,6 +1445,7 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
           post={editingPost}
           onClose={() => setEditingPost(null)}
           onSave={handlePostSaved}
+          enabledPlatforms={enabledPlatforms}
         />
       )}
 
@@ -1419,6 +1454,7 @@ export function BatchReview({ initialBatch, initialPosts }: BatchReviewProps) {
         <PostPreviewModal
           post={previewingPost}
           onClose={() => setPreviewingPost(null)}
+          enabledPlatforms={enabledPlatforms}
         />
       )}
     </div>

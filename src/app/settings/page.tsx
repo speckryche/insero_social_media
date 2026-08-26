@@ -24,6 +24,13 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  ALL_PLATFORMS,
+  PLATFORM_LABELS,
+  parseEnabledPlatforms,
+  type Platform,
+} from "@/lib/platforms";
 
 interface ConnectionStatus {
   tested: boolean;
@@ -56,6 +63,7 @@ export default function SettingsPage() {
   const [contentNotes, setContentNotes] = useState("");
   const [bannedWords, setBannedWords] = useState("");
   const [speckIsms, setSpeckIsms] = useState("");
+  const [enabledPlatforms, setEnabledPlatforms] = useState<Platform[]>(["linkedin"]);
   const [linkedinAuthorType, setLinkedinAuthorType] = useState("organization");
   const [autoPublishPersonal, setAutoPublishPersonal] = useState(false);
 
@@ -77,6 +85,7 @@ export default function SettingsPage() {
           setContentNotes(data.content_notes || "");
           setBannedWords(data.banned_words || "");
           setSpeckIsms(data.speck_isms || "");
+          setEnabledPlatforms(parseEnabledPlatforms(data.enabled_platforms));
           setLinkedinAuthorType(data.linkedin_author_type || "organization");
           setAutoPublishPersonal(data.auto_publish_personal || false);
         }
@@ -103,6 +112,7 @@ export default function SettingsPage() {
           content_notes: contentNotes,
           banned_words: bannedWords,
           speck_isms: speckIsms,
+          enabled_platforms: enabledPlatforms,
           linkedin_author_type: linkedinAuthorType,
           auto_publish_personal: autoPublishPersonal,
         }),
@@ -311,6 +321,50 @@ export default function SettingsPage() {
               One habit per line. Used for Personal Take posts only, as habits
               of speech rather than lines to copy.
             </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Enabled Platforms</Label>
+            <p className="text-xs text-gray-400">
+              Only these platforms are written, reviewed, and published.
+              LinkedIn is always on.
+            </p>
+            <div className="grid gap-2 pt-1">
+              {ALL_PLATFORMS.map((platform) => {
+                const isLinkedIn = platform === "linkedin";
+                const checked = enabledPlatforms.includes(platform);
+                return (
+                  <div key={platform} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`platform-${platform}`}
+                      checked={checked}
+                      disabled={isLinkedIn}
+                      onCheckedChange={(value) => {
+                        if (isLinkedIn) return;
+                        setEnabledPlatforms((prev) =>
+                          value === true
+                            ? parseEnabledPlatforms([...prev, platform])
+                            : parseEnabledPlatforms(
+                                prev.filter((p) => p !== platform)
+                              )
+                        );
+                      }}
+                    />
+                    <Label
+                      htmlFor={`platform-${platform}`}
+                      className={`text-sm font-normal ${
+                        isLinkedIn ? "text-gray-500" : "cursor-pointer"
+                      }`}
+                    >
+                      {PLATFORM_LABELS[platform]}
+                      {isLinkedIn && (
+                        <span className="text-xs text-gray-400"> — always on</span>
+                      )}
+                    </Label>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="space-y-2 max-w-[250px]">

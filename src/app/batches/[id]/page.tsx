@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { BatchReview } from "@/components/batch-review";
+import { parseEnabledPlatforms } from "@/lib/platforms";
 
 export const dynamic = "force-dynamic";
 
@@ -27,5 +28,18 @@ export default async function BatchDetailPage({
     .eq("batch_id", params.id)
     .order("post_number", { ascending: true });
 
-  return <BatchReview initialBatch={batch} initialPosts={posts || []} />;
+  // Which platforms the review UI should show. Read here rather than in the
+  // client so the tabs render correctly on first paint.
+  const { data: settings } = await supabase
+    .from("app_settings")
+    .select("enabled_platforms")
+    .single();
+
+  return (
+    <BatchReview
+      initialBatch={batch}
+      initialPosts={posts || []}
+      enabledPlatforms={parseEnabledPlatforms(settings?.enabled_platforms)}
+    />
+  );
 }

@@ -1,3 +1,5 @@
+import { DEFAULT_ENABLED_PLATFORMS, type Platform } from "@/lib/platforms";
+
 export const INSERO_SYSTEM_PROMPT = `You are a social media content writer for Insero, a technology brokerage based in the Pacific Northwest. The owner is Speck Hansen.
 
 ABOUT INSERO:
@@ -260,11 +262,28 @@ export function parseListSetting(raw: string | null | undefined): string[] {
     .filter((line) => line.length > 0);
 }
 
+const NUMBER_WORDS: Record<number, string> = {
+  1: "ONE",
+  2: "TWO",
+  3: "THREE",
+  4: "FOUR",
+  5: "FIVE",
+};
+
+export interface CategoryPromptOptions {
+  speckIsms?: string | null;
+  enabledPlatforms?: Platform[];
+}
+
 export function buildCategoryPrompt(
   category: ContentCategory,
   postCount: number = 12,
-  speckIsms?: string | null
+  options: CategoryPromptOptions = {}
 ): string {
+  const { speckIsms, enabledPlatforms } = options;
+  const enabled = enabledPlatforms?.length
+    ? enabledPlatforms
+    : DEFAULT_ENABLED_PLATFORMS;
   const hasImages = IMAGE_CATEGORIES.includes(category);
   const isPersonalTake = category === "personal_take";
 
@@ -293,10 +312,17 @@ ${speckIsmsBlock}`
 
   // The four _speak categories are company-page voice. Voice A is plural and
   // institutional; a stray "I" reads as Speck posting from the company page.
+  const companyVoiceFields = [
+    "linkedin_content",
+    enabled.includes("x") ? "x_content" : null,
+    enabled.includes("facebook") ? "facebook_content" : null,
+    enabled.includes("google") ? "google_content" : null,
+  ].filter((field): field is string => field !== null);
+
   const companyVoiceRule = isPersonalTake
     ? ""
     : `
-COMPANY VOICE — applies to linkedin_content, x_content, facebook_content, and google_content:
+COMPANY VOICE — applies to ${companyVoiceFields.join(", ")}:
 Never use first-person singular. No "I", "me", "my", "DM me". Always we/our/Insero.
 `;
 
@@ -341,17 +367,29 @@ Also generate image data for posts that will have branded images. Include these 
   // Use the base category prompt but replace "Generate 12" with actual count
   const categoryPrompt = CATEGORY_PROMPTS[category].replace(/Generate 12/g, `Generate ${postCount}`);
 
-  return `${categoryPrompt}
-${voiceBBlock}${companyVoiceRule}
-For each of the ${postCount} posts, generate FIVE platform-specific versions:
+  // Platform rules are assembled from only the enabled platforms, then
+  // numbered, so a disabled platform leaves no gap and no dangling rule the
+  // model might try to satisfy anyway. The two LinkedIn variants are always
+  // present — LinkedIn cannot be switched off.
+  const platformRules: Array<{ field: string; rule: string }> = [
+    {
+      field: "linkedin_content",
+      rule: `linkedin_content: 100-200 words. Hook in the first line. Short paragraphs (1-2 sentences each) with white space between them. Max 3 hashtags at the end if any. ${linkedinCtaNote} This is for the COMPANY PAGE — use the company voice profile.`,
+    },
+    { field: "linkedin_personal_content", rule: personalVariantRule },
+  ];
 
-1. linkedin_content: 100-200 words. Hook in the first line. Short paragraphs (1-2 sentences each) with white space between them. Max 3 hashtags at the end if any. ${linkedinCtaNote} This is for the COMPANY PAGE — use the company voice profile.
+  if (enabled.includes("x")) {
+    platformRules.push({
+      field: "x_content",
+      rule: `x_content: Under 280 characters. Punchy, direct, no hashtags unless truly relevant. The single best sentence or thought from the LinkedIn version. Never include URLs.`,
+    });
+  }
 
-${personalVariantRule}
-
-3. x_content: Under 280 characters. Punchy, direct, no hashtags unless truly relevant. The single best sentence or thought from the LinkedIn version. Never include URLs.
-
-4. facebook_content: AT LEAST 120 words (up to 180). Don't treat Facebook as a shorter LinkedIn — it should have room to develop the thought across 3-5 paragraphs. Slightly more casual than LinkedIn. 1-2 hashtags max. Ask a question in some posts to invite comments.
+  if (enabled.includes("facebook")) {
+    platformRules.push({
+      field: "facebook_content",
+      rule: `facebook_content: AT LEAST 120 words (up to 180). Don't treat Facebook as a shorter LinkedIn — it should have room to develop the thought across 3-5 paragraphs. Slightly more casual than LinkedIn. 1-2 hashtags max. Ask a question in some posts to invite comments.
 
 WORKED EXAMPLE — this illustrates the required length and paragraph structure ONLY. Do not copy the topic or wording into the actual posts:
 
@@ -363,17 +401,38 @@ Second, install timelines are wildly inconsistent. A 90-day quote can easily tur
 
 Third, your existing carrier rarely volunteers a better deal proactively. They wait for you to ask. So ask — there's almost always room.
 
-What's the trickiest thing you've run into with carrier quotes?"
+What's the trickiest thing you've run into with carrier quotes?"`,
+    });
+  }
 
-5. google_content: 80-150 words. Informative and useful — written for someone discovering Insero through a Google search. ${googleCtaNote} No hashtags.
+  if (enabled.includes("google")) {
+    platformRules.push({
+      field: "google_content",
+      rule: `google_content: 80-150 words. Informative and useful — written for someone discovering Insero through a Google search. ${googleCtaNote} No hashtags.`,
+    });
+  }
+
+  const versionCount = NUMBER_WORDS[platformRules.length] || String(platformRules.length);
+
+  // personalVariantRule carries its own "2." prefix from when the list was
+  // fixed at five; strip any leading number so the numbering below owns it.
+  const numberedRules = platformRules
+    .map((entry, i) => `${i + 1}. ${entry.rule.replace(/^\d+\.\s*/, "")}`)
+    .join("\n\n");
+
+  const jsonFields = platformRules
+    .map((entry) => `  "${entry.field}": "..."`)
+    .join(",\n");
+
+  return `${categoryPrompt}
+${voiceBBlock}${companyVoiceRule}
+For each of the ${postCount} posts, generate ${versionCount} platform-specific version${platformRules.length === 1 ? "" : "s"}:
+
+${numberedRules}
 ${imageFields}
 Respond with a JSON array of ${postCount} objects. Each object must have exactly these fields:
 {
-  "linkedin_content": "...",
-  "linkedin_personal_content": "...",
-  "x_content": "...",
-  "facebook_content": "...",
-  "google_content": "..."${imageFieldsJson}
+${jsonFields}${imageFieldsJson}
 }
 
 Use \\n for line breaks inside string values. Never emit a raw newline inside a string.

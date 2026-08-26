@@ -8,6 +8,10 @@ import {
   parseListSetting,
   ContentCategory,
 } from "@/lib/prompts";
+import {
+  parseEnabledPlatforms,
+  type Platform,
+} from "@/lib/platforms";
 
 // Read content skill file as the single source of truth for post generation
 const CONTENT_SKILL = readFileSync(
@@ -401,6 +405,7 @@ interface GenerationGuidance {
   contentNotes?: string;
   bannedWords?: string;
   speckIsms?: string;
+  enabledPlatforms?: Platform[];
 }
 
 async function generateCategoryPosts(
@@ -445,7 +450,10 @@ async function generateCategoryPosts(
       messages: [
         {
           role: "user",
-          content: buildCategoryPrompt(category, postCount, guidance.speckIsms),
+          content: buildCategoryPrompt(category, postCount, {
+            speckIsms: guidance.speckIsms,
+            enabledPlatforms: guidance.enabledPlatforms,
+          }),
         },
       ],
     })
@@ -484,7 +492,17 @@ async function generateCategoryPosts(
     );
   }
 
-  return posts;
+  // A disabled platform's field was never asked for, so it won't come back.
+  // Normalize every content field to a string so nothing downstream has to
+  // care which platforms were switched on when the batch was generated.
+  return posts.map((post) => ({
+    ...post,
+    linkedin_content: post.linkedin_content ?? "",
+    linkedin_personal_content: post.linkedin_personal_content ?? "",
+    x_content: post.x_content ?? "",
+    facebook_content: post.facebook_content ?? "",
+    google_content: post.google_content ?? "",
+  }));
 }
 
 async function generateImagesForPost(
@@ -611,11 +629,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Generate posts — one category at a time
+    const enabledPlatforms = parseEnabledPlatforms(settings.enabled_platforms);
     const guidance: GenerationGuidance = {
       contentNotes: settings.content_notes || "",
       bannedWords: settings.banned_words || "",
       speckIsms: settings.speck_isms || "",
+      enabledPlatforms,
     };
+    console.log(
+      `[generate-batch] enabled platforms: ${enabledPlatforms.join(", ")}`
+    );
     const postsByCategory = new Map<ContentCategory, GeneratedPost[]>();
 
     // Per-category counts: flat 2 each in test mode, otherwise apportioned
@@ -709,9 +732,15 @@ export async function POST(request: NextRequest) {
           item.category === "personal_take"
             ? item.post.linkedin_personal_content
             : "",
-        x_content: item.post.x_content,
-        facebook_content: item.post.facebook_content,
-        google_content: item.post.google_content,
+        // Disabled platforms are stored as empty strings — the column stays,
+        // the publisher stays, there is just nothing to publish.
+        x_content: enabledPlatforms.includes("x") ? item.post.x_content : "",
+        facebook_content: enabledPlatforms.includes("facebook")
+          ? item.post.facebook_content
+          : "",
+        google_content: enabledPlatforms.includes("google")
+          ? item.post.google_content
+          : "",
         has_image: image.has_image,
         image_template_type: image.image_template_type,
         image_headline: imageHeadline,

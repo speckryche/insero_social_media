@@ -45,17 +45,17 @@ const CATEGORIES: ContentCategory[] = [
   "tech_speak",
   "quote_speak",
   "cost_speak",
-  "humor_speak",
+  "pots_speak",
   "personal_take",
 ];
 
 // Share of every batch by category, per the content plan. Sums to 1.0.
 const CATEGORY_MIX: Record<ContentCategory, number> = {
-  ai_speak: 0.30,
+  ai_speak: 0.27,
   tech_speak: 0.13,
   quote_speak: 0.13,
   cost_speak: 0.13,
-  humor_speak: 0.08,
+  pots_speak: 0.10,
   personal_take: 0.23,
 };
 
@@ -67,7 +67,7 @@ const COMPANY_CATEGORIES: ContentCategory[] = [
   "tech_speak",
   "quote_speak",
   "cost_speak",
-  "humor_speak",
+  "pots_speak",
 ];
 
 function categoriesForScope(scope: BatchScope): ContentCategory[] {
@@ -199,10 +199,12 @@ function assignImageTemplate(
           }
         : { has_image: false, image_template_type: null };
       break;
-    case "humor_speak":
+    case "pots_speak":
+      // A running series about what to check and what replaces what — lists
+      // and tip cards carry it better than stat or quote templates.
       base = {
         has_image: true,
-        image_template_type: indexInCategory % 2 === 0 ? "quote_card" : "tip_graphic",
+        image_template_type: indexInCategory % 2 === 0 ? "checklist" : "tip_graphic",
       };
       break;
     case "personal_take":
@@ -253,10 +255,11 @@ function assignImageTemplate(
     return { has_image: true, image_template_type: "comparison" };
   }
 
-  if (category === "humor_speak") {
-    // A joke lands better on a photo or a quote card than on a chart.
+  if (category === "pots_speak") {
+    // 35% overlay_right, 15% overlay_left, rest on the checklist / tip_graphic
+    // base — copper posts are practical, so the list templates do the work.
     if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
-    if (rand < 0.55) return { has_image: true, image_template_type: "photo_landscape" };
+    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
     return base;
   }
 
@@ -415,14 +418,10 @@ async function generateCategoryPosts(
       max_tokens: maxTokens,
       // Thinking stays on — disabling it on Sonnet 5 risks leaked reasoning
       // tags — but low effort keeps it from eating the output budget on what
-      // is really just JSON assembly from an explicit spec. personal_take and
-      // humor_speak are the exceptions: hitting Voice B's register, and
-      // landing an actual joke, both take more room to think.
+      // is really just JSON assembly from an explicit spec. personal_take is
+      // the exception: hitting Voice B's register takes more room to think.
       output_config: {
-        effort:
-          category === "personal_take" || category === "humor_speak"
-            ? "medium"
-            : "low",
+        effort: category === "personal_take" ? "medium" : "low",
       },
       system: systemPrompt,
       messages: [
@@ -775,7 +774,7 @@ export async function POST(request: NextRequest) {
       tech_speak: ["checklist", "photo_overlay_right"],
       quote_speak: ["savings_highlight", "quote_card"],
       cost_speak: ["comparison", "checklist"],
-      humor_speak: ["quote_card", "tip_graphic"],
+      pots_speak: ["checklist", "tip_graphic"],
       // personal_take gets no LLM image fields, so it only renders correctly
       // on the photo templates the fallback below fills from the post's own
       // copy. Anything else would come out with empty text.

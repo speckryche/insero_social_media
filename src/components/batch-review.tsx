@@ -95,9 +95,10 @@ const CATEGORY_STYLES: Record<string, string> = {
   tech_speak: "bg-amber-100 text-amber-800",
   quote_speak: "bg-emerald-100 text-emerald-800",
   cost_speak: "bg-rose-100 text-rose-800",
-  humor_speak: "bg-orange-100 text-orange-800",
+  pots_speak: "bg-orange-100 text-orange-800",
   personal_take: "bg-violet-100 text-violet-800",
   // Legacy categories — see note above.
+  humor_speak: "bg-orange-100 text-orange-800",
   bill_speak: "bg-sky-100 text-sky-800",
   contract_speak: "bg-rose-100 text-rose-800",
   did_you_know: "bg-sky-100 text-sky-800",
@@ -111,10 +112,11 @@ const CATEGORY_LABELS: Record<string, string> = {
   tech_speak: "Tech Speak",
   quote_speak: "Quote Speak",
   cost_speak: "Cost Speak",
-  humor_speak: "Humor Speak",
+  pots_speak: "POTS Speak",
   personal_take: "Personal Take",
   // Legacy categories — kept so posts from earlier batches still render a
   // label. Not offered in any picker.
+  humor_speak: "Humor Speak",
   bill_speak: "Bill Speak",
   contract_speak: "Contract Speak",
   did_you_know: "Did You Know",
@@ -130,9 +132,10 @@ const DEFAULT_TEMPLATE_BY_CATEGORY: Record<string, string> = {
   tech_speak: "checklist",
   quote_speak: "photo_landscape",
   cost_speak: "comparison",
-  humor_speak: "quote_card",
+  pots_speak: "checklist",
   personal_take: "photo_landscape",
   // Legacy categories — see note above.
+  humor_speak: "quote_card",
   bill_speak: "photo_stat",
   contract_speak: "checklist",
   // Legacy categories — see note above.
@@ -1036,7 +1039,7 @@ export function BatchReview({
             <SelectItem value="tech_speak">Tech Speak</SelectItem>
             <SelectItem value="quote_speak">Quote Speak</SelectItem>
             <SelectItem value="cost_speak">Cost Speak</SelectItem>
-            <SelectItem value="humor_speak">Humor Speak</SelectItem>
+            <SelectItem value="pots_speak">POTS Speak</SelectItem>
             <SelectItem value="personal_take">Personal Take</SelectItem>
           </SelectContent>
         </Select>

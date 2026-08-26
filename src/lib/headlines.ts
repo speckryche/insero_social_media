@@ -28,7 +28,9 @@ export interface HeadlineItem {
 export const FEEDS_BY_CATEGORY: Record<string, HeadlineFeed[]> = {
   ai_speak: ["ai_voice"],
   tech_speak: ["ai_tech"],
-  humor_speak: ["ai_tech"],
+  // ai_tech reaches pots_speak, but its prompt filters to copper-shutdown
+  // and carrier-change items only.
+  pots_speak: ["ai_tech"],
   personal_take: ["crypto", "ai_tech"],
   // quote_speak and cost_speak never receive headlines — their material is
   // the paperwork and the spend, not the news.

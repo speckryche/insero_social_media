@@ -63,7 +63,7 @@ export type ContentCategory =
   | "tech_speak"
   | "quote_speak"
   | "cost_speak"
-  | "humor_speak"
+  | "pots_speak"
   | "personal_take";
 
 // Shared structure for the four company categories. Every post takes one piece
@@ -125,28 +125,18 @@ A bill or contract line makes a good hook — "Minimum Usage Charge", "Early Ter
 
 CRITICAL: Never a dollar figure or percentage. Never present a scenario as something that happened unless it clearly reads as hypothetical ("Say a 20-person office…").`,
 
-  humor_speak: `Generate 12 "Humor Speak" posts. These are pure jokes.
+  pots_speak: `Generate 12 "POTS Speak" social media posts.
 
 THE BRIEF (from the content skill, verbatim):
-Pure jokes. 1–3 sentences. The joke IS the post: no setup paragraph, no explanation, no "but seriously," no lesson, no takeaway. Subject is technology, usually AI: what AI is doing, the fears around it, the gap between the demo and the office, AI vs. the fax machine. Absurd enough that nobody thinks it happened. Rules: never mock a customer, a carrier, or a real person; no doom; the joke is on the technology or on us. Warm, dry, quick. If it isn't funny, don't post it — write a one-line observation instead.
+The copper shutdown, as a running series. Carriers are retiring analog POTS lines nationally; prices on remaining lines are climbing fast and many businesses have no idea they still have them. Angles: what still runs on copper (fax, alarm panels, elevators, fire panels, gate intercoms, credit card terminals), what replaces each one (POTS replacement over internet, cellular-backed devices), why the bill keeps going up, and what to check this week. Use the Telecom-speak → Human-speak format on a carrier notice line or a bill line when it fits ("legacy copper facilities," "discontinuance of service"). Urgency is real; state it plainly without fear-mongering. Never name a carrier negatively. Never a dollar figure, percentage, or specific date unless it comes from a picked headline. Insero's role: find every copper line on the account, pick the right replacement, source it.
 
-FORMAT: **1-3 sentences. Hard limit.** The joke is the entire post. This overrides the usual company post length — do not write paragraphs here.
-- No setup paragraph. No scene-setting. Open on the joke.
-- No explanation after the punchline. No "but seriously." No lesson. No takeaway line.
-- No CTA, no soft close, no question to the audience.
-- Absurd enough that nobody reads it as something that actually happened.
+${TELECOM_SPEAK_FORMAT}
 
-RULES OF THE JOKE, all mandatory:
-- Never mock a customer, a carrier, or a real person. Carriers are partners.
-- No doom. Nothing about jobs disappearing or the world ending.
-- The joke is on the technology, or on us.
-- Warm, dry, quick. One joke per post.
-- If a post isn't actually funny, don't force it — write a one-line observation instead.
+This is a running series, so rotate the angle across the batch: one post on what still runs on copper, the next on what replaces it, the next on why the bill climbs, the next on what to check this week. Carrier notice language makes the best hook — "legacy copper facilities are being retired", "discontinuance of service", "grandfathered rate".
 
-EXAMPLES OF THE TARGET — these show the length and the shape only. Do not reuse them, and do not reuse their subjects:
-- "We asked an AI to explain our internet bill. It asked for a moment."
-- "An AI can now summarize a 60-minute meeting in 30 seconds. Still working on the version that cancels it."
-- "The hold music is AI-generated now. The wait is still human."`,
+HEADLINES: only use a headline from the list if it is specifically about a copper or POTS shutdown, a carrier retiring analog service, or a carrier change that affects those lines. Skip any other headline — a general AI or tech story does not belong in this category.
+
+CRITICAL: Urgency is real — say it plainly, and never as fear. Never name a carrier negatively. Never a dollar figure, a percentage, or a specific date unless it comes from a picked headline.`,
 
   personal_take: `Generate 12 "Personal Take" posts for Speck's personal LinkedIn profile.
 
@@ -229,14 +219,14 @@ function buildBucketAssignments(postCount: number): string {
   return lines.join("\n");
 }
 
-export type ImageCategory = "ai_speak" | "tech_speak" | "quote_speak" | "cost_speak" | "humor_speak";
+export type ImageCategory = "ai_speak" | "tech_speak" | "quote_speak" | "cost_speak" | "pots_speak";
 
 const IMAGE_CATEGORIES: ContentCategory[] = [
   "ai_speak",
   "tech_speak",
   "quote_speak",
   "cost_speak",
-  "humor_speak",
+  "pots_speak",
 ];
 
 // Settings textareas hold one entry per line. Blank lines and stray spacing
@@ -400,16 +390,10 @@ Also generate image data for posts that will have branded images. Include these 
   // numbered, so a disabled platform leaves no gap and no dangling rule the
   // model might try to satisfy anyway. The two LinkedIn variants are always
   // present — LinkedIn cannot be switched off.
-  // humor_speak is the exception to the company post length: the joke is the
-  // whole post, so the usual 100-200 words would bury it.
-  const isHumorSpeak = category === "humor_speak";
-
   const platformRules: Array<{ field: string; rule: string }> = [
     {
       field: "linkedin_content",
-      rule: isHumorSpeak
-        ? `linkedin_content: **1-3 sentences. Hard limit.** This overrides the usual company post length — the joke is the entire post. No hook line, no setup, no explanation, no takeaway, no CTA, no hashtags. This is for the COMPANY PAGE — use the company voice profile.`
-        : `linkedin_content: 100-200 words. Hook in the first line. Short paragraphs (1-2 sentences each) with white space between them. No hashtags. ${linkedinCtaNote} This is for the COMPANY PAGE — use the company voice profile.`,
+      rule: `linkedin_content: 100-200 words. Hook in the first line. Short paragraphs (1-2 sentences each) with white space between them. No hashtags. ${linkedinCtaNote} This is for the COMPANY PAGE — use the company voice profile.`,
     },
     { field: "linkedin_personal_content", rule: personalVariantRule },
   ];

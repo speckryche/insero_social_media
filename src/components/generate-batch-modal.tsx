@@ -39,7 +39,7 @@ const PROGRESS_MESSAGES = [
   'Generating "Tech Speak" posts...',
   'Generating "Quote Speak" posts...',
   'Generating "Cost Speak" posts...',
-  'Generating "Humor Speak" posts...',
+  'Generating "POTS Speak" posts...',
   'Generating "Personal Take" posts...',
   "Assigning schedules and images...",
   "Almost done...",
@@ -336,7 +336,7 @@ export function GenerateBatchModal() {
                       </div>
                     ))}
                     <p className="text-xs text-gray-400 pt-1">
-                      {pickedIds.length} picked. Used by AI, Tech, Humor, and
+                      {pickedIds.length} picked. Used by AI, Tech, POTS, and
                       Personal Take only.
                     </p>
                   </div>

@@ -50,18 +50,6 @@ const SCOPE_OPTIONS: Array<{ value: BatchScope; label: string; hint: string }> =
 const POST_COUNT_PRESETS = [10, 20, 30, 40, 50, 60];
 const DEFAULT_POST_COUNT = 30;
 
-// Each scope's share of the mix. A scoped batch of size N takes its share of
-// N — the same split a Both batch of size N would produce internally.
-const SCOPE_SHARE: Record<BatchScope, number> = {
-  both: 1,
-  company: 0.75,
-  personal: 0.25,
-};
-
-function scopeCount(scope: BatchScope, postCount: number): number {
-  return Math.max(1, Math.round(postCount * SCOPE_SHARE[scope]));
-}
-
 // Test mode ignores the size picker: 2 per included category.
 const SCOPE_TEST_COUNTS: Record<BatchScope, number> = {
   both: 10,
@@ -134,9 +122,9 @@ export function GenerateBatchModal() {
   const years = [currentYear, currentYear + 1];
 
   const chosenSize = parseInt(postCount) || DEFAULT_POST_COUNT;
-  const effectiveCount = testMode
-    ? SCOPE_TEST_COUNTS[scope]
-    : scopeCount(scope, chosenSize);
+  // The size is the exact post count for whichever scope is chosen — the
+  // scope only decides which categories those posts are split across.
+  const effectiveCount = testMode ? SCOPE_TEST_COUNTS[scope] : chosenSize;
   const scopeLabel = SCOPE_OPTIONS.find((o) => o.value === scope)!.label;
 
   return (
@@ -233,8 +221,8 @@ export function GenerateBatchModal() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-gray-400">
-                    Spread evenly across the month. A scoped batch takes its
-                    share — {scopeLabel.toLowerCase()} gives {effectiveCount}.
+                    Spread evenly across the month. This is the exact count for
+                    whichever scope you pick.
                   </p>
                 </div>
               )}
@@ -276,7 +264,7 @@ export function GenerateBatchModal() {
                             {option.hint} &middot;{" "}
                             {testMode
                               ? SCOPE_TEST_COUNTS[option.value]
-                              : scopeCount(option.value, chosenSize)}{" "}
+                              : chosenSize}{" "}
                             posts
                           </span>
                         </span>

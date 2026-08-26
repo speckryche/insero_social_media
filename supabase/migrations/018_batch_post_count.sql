@@ -2,10 +2,11 @@
 -- Adds batches.post_count — the batch size chosen in the Generate dialog
 -- (10 / 20 / 30 / 40 / 50 / 60). Companion to batches.scope from migration 013.
 --
--- This is the requested size, not the number of rows created. A scoped batch
--- takes its share of it: at size 30, "Company only" generates ~23 and
--- "Personal only" ~8, the same proportions a size-30 "Both" batch splits into.
--- batches.total_posts still holds the actual row count.
+-- The size is the exact post count for whichever scope was chosen: at size 30,
+-- "Personal only" generates 30 personal posts and "Company only" generates 30
+-- split across the four _speak categories. So post_count normally equals
+-- batches.total_posts; they diverge only when the month has fewer time slots
+-- than the requested size (a 28-day month caps a 60-post batch at 56).
 --
 -- Nullable: batches created before this column existed have no recorded size,
 -- and the UI simply omits it for them. Nothing backfills.

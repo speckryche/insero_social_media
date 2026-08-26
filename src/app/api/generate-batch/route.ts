@@ -72,20 +72,15 @@ function categoriesForScope(scope: BatchScope): ContentCategory[] {
 const POST_COUNT_PRESETS = [10, 20, 30, 40, 50, 60];
 const DEFAULT_POST_COUNT = 30;
 
-// Full-batch totals. A scoped batch gets exactly the share it would have had
-// inside a "both" batch of the same size: at 60, company 75% = 45 and
-// personal 25% = 15; at 30, 23 and 8.
-function totalPostsForScope(
-  scope: BatchScope,
-  daysInMonth: number,
-  postCount: number
-): number {
-  const both = Math.min(postCount, daysInMonth * 2);
-  const share = categoriesForScope(scope).reduce(
-    (sum, category) => sum + CATEGORY_MIX[category],
-    0
-  );
-  return Math.max(1, Math.round(both * share));
+// The chosen size is the exact number of posts for whatever scope is picked:
+// "Personal only" at 30 means 30 personal posts, not 30 * the personal share.
+// The scope decides which categories are in play; allocateByMix then splits
+// the full count across just those, renormalizing their proportions.
+//
+// The only thing that can shorten a batch is the calendar — a 28-day month
+// offers 56 slots, so a 60-post batch there becomes 56.
+function totalPostsForBatch(daysInMonth: number, postCount: number): number {
+  return Math.min(postCount, daysInMonth * 2);
 }
 
 // Largest-remainder apportionment, so the per-category counts always sum to
@@ -557,7 +552,7 @@ export async function POST(request: NextRequest) {
     const daysInMonth = new Date(year, month, 0).getDate();
     const totalPosts = testMode
       ? categoriesToGenerate.length * 2
-      : totalPostsForScope(scope, daysInMonth, postCount);
+      : totalPostsForBatch(daysInMonth, postCount);
 
     const { data: batchData, error: batchError } = await supabase
       .from("batches")

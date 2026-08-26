@@ -181,7 +181,7 @@ Speck is NOT deadpan or dry. He is warm, excited, and happily self-roasting. He 
 
 REFERENCE LINE, written by Speck himself:
 "Spent the week building a commission tracker with my new BFF named Claude - he's simply Amazing! AI makes dummy's like me feel smart!"
-Every personal post should sound like the same person wrote that.
+Every personal post should sound like the same person wrote that. Do not reuse its wording. There are intentionally no sample posts. Write each post fresh from its bucket, the register, and the facts.
 
 RULES:
 - 1-3 sentences. If it needs a fourth, it's a company post.
@@ -191,13 +191,7 @@ RULES:
 - Insero shows up in about 1 of 4 posts, mentioned like a job, never like a pitch. Never a link.
 - No hashtags. No emojis. No CTAs. No links. No filler questions to the audience. (A real question Speck actually wants answered is fine.)
 - Text only. Nothing that requires Speck's face or a photo of him.
-
-SAMPLES OF THE VOICE — the samples show the register only — never reuse their topics or sentence structure.
-- Spent the week building a commission tracker with my new BFF Claude. Guys like me who can't code just built software. What a time to be alive!
-- Went riding with my wife and daughter today. Got out-ridden by both of them and I'm weirdly proud about it.
-- Customer called totally lost about a line on their phone bill. Five minutes later he said "why didn't anyone just tell me that?" Great question honestly. That's the whole job!
-- Golf update: still not playing. Pool update: thriving.
-- Serious question for the crypto people: how do you explain a stablecoin to a friend in one sentence? I'm at four and losing them.`,
+- Vary sentence openings across posts — do not start two posts the same way.`,
 };
 
 // Voice B's five buckets, from the skill file. Posts rotate through these in

@@ -559,20 +559,46 @@ export async function POST(request: NextRequest) {
       apiKey: process.env.ANTHROPIC_API_KEY!,
     });
 
-    // Check for existing batch in this month
-    const { data: existingBatch } = await supabase
+    // One live batch per month per scope. A "both" batch occupies the company
+    // and personal halves at once, so it conflicts with anything; company-only
+    // and personal-only batches can coexist for the same month. They publish
+    // to different LinkedIn destinations, so sharing time slots is fine.
+    const { data: existingBatches } = await supabase
       .from("batches")
-      .select("id, status")
+      .select("id, status, scope")
       .eq("month", month)
       .eq("year", year)
-      .neq("status", "completed")
-      .maybeSingle();
+      .neq("status", "completed");
 
-    if (existingBatch) {
+    const conflicting = (existingBatches || []).find((batch) => {
+      // A NULL scope predates the column and covered everything.
+      const existingScope = (batch.scope as BatchScope) || "both";
+      return (
+        existingScope === "both" || scope === "both" || existingScope === scope
+      );
+    });
+
+    if (conflicting) {
+      const existingScope = (conflicting.scope as BatchScope) || "both";
+      const describe = (value: BatchScope) =>
+        value === "both"
+          ? "Company + Personal"
+          : value === "company"
+          ? "Company only"
+          : "Personal only";
+
+      const reason =
+        existingScope === scope
+          ? `A ${describe(scope)} batch already exists for this month (status: ${conflicting.status}).`
+          : `A ${describe(existingScope)} batch already exists for this month (status: ${conflicting.status}), and it overlaps a ${describe(scope)} batch.`;
+
+      const suggestion =
+        existingScope === "both" || scope === "both"
+          ? " Delete it, choose a different month, or generate the two halves separately as Company only and Personal only."
+          : " Delete it or choose a different month.";
+
       return NextResponse.json(
-        {
-          error: `A batch already exists for this month (status: ${existingBatch.status}). Delete it first or choose a different month.`,
-        },
+        { error: reason + suggestion },
         { status: 409 }
       );
     }

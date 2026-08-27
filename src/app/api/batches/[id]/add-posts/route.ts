@@ -12,8 +12,11 @@ import {
   categoriesForScope,
   assignImageTemplate,
   buildAllSlots,
+  buildWeekSlots,
+  loadTakenSlotsForWeek,
   selectEvenly,
   slotKey,
+  SLOTS_PER_WEEK,
   generateCategoryPosts,
   type BatchScope,
   type ImageTemplateType,
@@ -55,7 +58,7 @@ export async function POST(
 
     const { data: batch, error: batchError } = await supabase
       .from("batches")
-      .select("id, month, year, scope, total_posts")
+      .select("id, month, year, week_start_date, scope, total_posts")
       .eq("id", params.id)
       .single();
 
@@ -131,7 +134,7 @@ export async function POST(
     );
 
     // The model can return more or fewer than asked; take what was requested.
-    const posts = generated.slice(0, count);
+    let posts = generated.slice(0, count);
     if (posts.length === 0) {
       return NextResponse.json(
         { error: "The model returned no posts. Try again." },
@@ -145,27 +148,60 @@ export async function POST(
       .select("post_number, scheduled_date, time_slot, content_category")
       .eq("batch_id", params.id);
 
-    const allSlots = buildAllSlots(batch.month, batch.year, settings);
-    const taken = new Set(
-      (existingPosts || []).map((p) =>
-        slotKey({
-          scheduled_date: String(p.scheduled_date),
-          time_slot: String(p.time_slot),
-        })
-      )
-    );
+    // A weekly batch schedules into its own Mon-Fri week. A legacy monthly
+    // batch has no week_start_date, so it keeps using the whole month,
+    // weekends and all — the monthly drafts already in the database have to
+    // go on working exactly as they did.
+    const weekStart = batch.week_start_date
+      ? String(batch.week_start_date)
+      : null;
 
-    // Unused slots come first, spread evenly across whatever is left. Only
-    // when the month is genuinely full do we double up on existing slots.
+    const allSlots = weekStart
+      ? buildWeekSlots(weekStart, settings)
+      : buildAllSlots(Number(batch.month), Number(batch.year), settings);
+
+    // Contention differs by era. A week is shared with every other batch in
+    // it, so read what is taken through the same helper the generate route
+    // uses — that is what stops the two paths disagreeing. A legacy monthly
+    // batch only ever competed with itself.
+    const taken = weekStart
+      ? await loadTakenSlotsForWeek(supabase, weekStart)
+      : new Set(
+          (existingPosts || []).map((p) =>
+            slotKey({
+              scheduled_date: String(p.scheduled_date),
+              time_slot: String(p.time_slot),
+            })
+          )
+        );
+
     const freeSlots = allSlots.filter((slot) => !taken.has(slotKey(slot)));
     const chosenSlots = selectEvenly(freeSlots, posts.length);
 
     if (chosenSlots.length < posts.length) {
-      const shortfall = posts.length - chosenSlots.length;
-      console.log(
-        `[add-posts] month is full — reusing ${shortfall} existing slot(s)`
-      );
-      chosenSlots.push(...selectEvenly(allSlots, shortfall));
+      if (weekStart) {
+        // The week caps out at SLOTS_PER_WEEK. Shorten the add rather than
+        // double-book a slot — the same rule the generate route follows.
+        if (chosenSlots.length === 0) {
+          return NextResponse.json(
+            {
+              error: `No free slots left in the week of ${weekStart}. A week holds ${SLOTS_PER_WEEK} posts and all of them are taken.`,
+            },
+            { status: 409 }
+          );
+        }
+        console.log(
+          `[add-posts] week ${weekStart} has ${chosenSlots.length} free slot(s) — adding ${chosenSlots.length} of ${posts.length}`
+        );
+        posts = posts.slice(0, chosenSlots.length);
+      } else {
+        // Legacy months double up only when the month is genuinely full.
+        const shortfall = posts.length - chosenSlots.length;
+        console.log(
+          `[add-posts] month is full — reusing ${shortfall} existing slot(s)`
+        );
+        chosenSlots.push(...selectEvenly(allSlots, shortfall));
+      }
     }
 
     const startNumber =

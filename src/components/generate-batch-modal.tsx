@@ -27,6 +27,7 @@ import {
   FEED_LABELS,
   type HeadlineItem,
 } from "@/lib/headlines";
+import { SLOTS_PER_WEEK } from "@/lib/week";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -56,11 +57,13 @@ const SCOPE_OPTIONS: Array<{ value: BatchScope; label: string; hint: string }> =
 const POST_COUNT_PRESETS = [10, 20, 30, 40, 50, 60];
 const DEFAULT_POST_COUNT = 30;
 
-// Test mode ignores the size picker: 2 per included category.
+// Test mode ignores the size picker: 2 per included category, capped at what
+// a week can hold. "Both" wants 12 (six categories) but a week only has
+// SLOTS_PER_WEEK slots, so it lands on 10.
 const SCOPE_TEST_COUNTS: Record<BatchScope, number> = {
-  both: 12,
-  company: 10,
-  personal: 2,
+  both: Math.min(12, SLOTS_PER_WEEK),
+  company: Math.min(10, SLOTS_PER_WEEK),
+  personal: Math.min(2, SLOTS_PER_WEEK),
 };
 
 export function GenerateBatchModal() {

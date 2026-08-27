@@ -8,6 +8,9 @@ import {
   POST_COUNT_PRESETS,
   DEFAULT_POST_COUNT,
   totalPostsForBatch,
+  SLOTS_PER_WEEK,
+  loadTakenSlotsForWeek,
+  countFreeSlots,
   allocateByMix,
   assignImageTemplate,
   buildSchedule,
@@ -20,13 +23,72 @@ import {
   type GenerationGuidance,
 } from "@/lib/batch-generation";
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  nextMonday,
+  isMonday,
+  isISODate,
+  dayName,
+  mondayOf,
+  parseISODate,
+  toISODate,
+  formatWeekRange,
+} from "@/lib/week";
+
+// GET /api/generate-batch?weekStart=YYYY-MM-DD — how full a week is, without
+// generating anything.
+//
+// The Generate dialog has to show "X of 10 slots free" for the week being
+// picked, which is before any POST happens. It reads that here rather than
+// running its own contention query, so the number it shows and the number the
+// POST enforces can never drift apart. Defaults to next Monday, same as POST.
+export async function GET(request: NextRequest) {
+  try {
+    const raw = request.nextUrl.searchParams.get("weekStart");
+    const weekStart = raw && raw !== "" ? raw : nextMonday();
+
+    if (!isISODate(weekStart)) {
+      return NextResponse.json(
+        { error: `Invalid weekStart: ${weekStart}. Expected a calendar date as YYYY-MM-DD.` },
+        { status: 400 }
+      );
+    }
+    if (!isMonday(weekStart)) {
+      return NextResponse.json(
+        {
+          error:
+            `weekStart must be a Monday. ${weekStart} is a ${dayName(weekStart)} — ` +
+            `the Monday of that week is ${mondayOf(parseISODate(weekStart))}.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const supabase = getSupabase();
+    const takenSlots = await loadTakenSlotsForWeek(supabase, weekStart);
+
+    return NextResponse.json({
+      weekStart,
+      weekLabel: formatWeekRange(weekStart),
+      slotsTotal: SLOTS_PER_WEEK,
+      slotsFree: countFreeSlots(weekStart, takenSlots),
+      hasStarted: weekStart < toISODate(new Date()),
+    });
+  } catch (error) {
+    console.error("[generate-batch] slot lookup failed:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unknown error" },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
   let batch: { id: string } | null = null;
   try {
     const {
-      month,
-      year,
+      weekStart: rawWeekStart,
+      // A week already under way is refused unless the caller means it.
+      allowPast = false,
       testMode,
       includeImages = true,
       scope: rawScope = "both",
@@ -35,9 +97,45 @@ export async function POST(request: NextRequest) {
       headlineIds,
     } = await request.json();
 
-    if (!month || !year || month < 1 || month > 12) {
+    // A scheduler can post no date at all and mean "the coming week", which
+    // is what makes a weekly cron a fixed body with no date maths in it.
+    const weekStart: string =
+      rawWeekStart === undefined || rawWeekStart === null || rawWeekStart === ""
+        ? nextMonday()
+        : String(rawWeekStart);
+
+    if (!isISODate(weekStart)) {
       return NextResponse.json(
-        { error: "Invalid month or year" },
+        {
+          error: `Invalid weekStart: ${JSON.stringify(rawWeekStart)}. Expected a calendar date as YYYY-MM-DD.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // The database enforces this too (batches_week_start_is_monday), but a
+    // constraint violation reads like a bug. Say which day they sent and what
+    // the right Monday would have been.
+    if (!isMonday(weekStart)) {
+      return NextResponse.json(
+        {
+          error:
+            `weekStart must be a Monday. ${weekStart} is a ${dayName(weekStart)} — ` +
+            `the Monday of that week is ${mondayOf(parseISODate(weekStart))}.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Half a started week's slots are already in the past, so filling it is
+    // almost always a mistake. Backfilling stays possible on purpose.
+    if (!allowPast && weekStart < toISODate(new Date())) {
+      return NextResponse.json(
+        {
+          error:
+            `The week of ${formatWeekRange(weekStart)} has already started. ` +
+            `Pass allowPast: true to generate into it anyway.`,
+        },
         { status: 400 }
       );
     }
@@ -68,15 +166,23 @@ export async function POST(request: NextRequest) {
       apiKey: process.env.ANTHROPIC_API_KEY!,
     });
 
-    // One live batch per month per scope. A "both" batch occupies the company
+    // What the week already owes. Note the two rules read different sets on
+    // purpose: the conflict rule below ignores completed batches, because a
+    // finished week shouldn't block a new one — but slot contention counts
+    // every batch including completed ones, since a post that already went
+    // out on Monday morning still occupies Monday morning.
+    const takenSlots = await loadTakenSlotsForWeek(supabase, weekStart);
+    const slotsFree = countFreeSlots(weekStart, takenSlots);
+
+    // One live batch per week per scope. A "both" batch occupies the company
     // and personal halves at once, so it conflicts with anything; company-only
-    // and personal-only batches can coexist for the same month. They publish
-    // to different LinkedIn destinations, so sharing time slots is fine.
+    // and personal-only batches can coexist in the same week. They publish
+    // to different LinkedIn destinations, so sharing a week is fine — but not
+    // a slot, which is what takenSlots above is for.
     const { data: existingBatches } = await supabase
       .from("batches")
       .select("id, status, scope")
-      .eq("month", month)
-      .eq("year", year)
+      .eq("week_start_date", weekStart)
       .neq("status", "completed");
 
     const conflicting = (existingBatches || []).find((batch) => {
@@ -98,31 +204,64 @@ export async function POST(request: NextRequest) {
 
       const reason =
         existingScope === scope
-          ? `A ${describe(scope)} batch already exists for this month (status: ${conflicting.status}).`
-          : `A ${describe(existingScope)} batch already exists for this month (status: ${conflicting.status}), and it overlaps a ${describe(scope)} batch.`;
+          ? `A ${describe(scope)} batch already exists for the week of ${formatWeekRange(weekStart)} (status: ${conflicting.status}).`
+          : `A ${describe(existingScope)} batch already exists for the week of ${formatWeekRange(weekStart)} (status: ${conflicting.status}), and it overlaps a ${describe(scope)} batch.`;
 
       const suggestion =
         existingScope === "both" || scope === "both"
-          ? " Delete it, choose a different month, or generate the two halves separately as Company only and Personal only."
-          : " Delete it or choose a different month.";
+          ? " Delete it, choose a different week, or generate the two halves separately as Company only and Personal only."
+          : " Delete it or choose a different week.";
 
       return NextResponse.json(
-        { error: reason + suggestion },
+        {
+          error: reason + suggestion,
+          weekStart,
+          slotsTotal: SLOTS_PER_WEEK,
+          slotsFree,
+          existingBatchId: conflicting.id,
+        },
         { status: 409 }
       );
     }
 
-    // 1. Create the batch record
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const totalPosts = testMode
-      ? categoriesToGenerate.length * 2
-      : totalPostsForBatch(daysInMonth, postCount);
+    // Slot contention is real now: a week has only SLOTS_PER_WEEK slots and a
+    // company batch and a personal batch share them.
+    if (slotsFree === 0) {
+      return NextResponse.json(
+        {
+          error:
+            `Every slot in the week of ${formatWeekRange(weekStart)} is already taken. ` +
+            `A week holds ${SLOTS_PER_WEEK} posts. Delete a batch in that week or choose another week.`,
+          weekStart,
+          slotsTotal: SLOTS_PER_WEEK,
+          slotsFree: 0,
+        },
+        { status: 409 }
+      );
+    }
+
+    // 1. Create the batch record.
+    // The week is the ceiling twice over: SLOTS_PER_WEEK in total, and only
+    // slotsFree of those actually available. Asking for more than is free
+    // shortens the batch rather than double-booking a slot.
+    const requestedPosts = testMode
+      ? Math.min(categoriesToGenerate.length * 2, SLOTS_PER_WEEK)
+      : totalPostsForBatch(postCount);
+    const totalPosts = Math.min(requestedPosts, slotsFree);
+
+    if (totalPosts < requestedPosts) {
+      console.log(
+        `[generate-batch] week of ${weekStart} has ${slotsFree} free slot(s) — ` +
+          `shortening from ${requestedPosts} to ${totalPosts}`
+      );
+    }
 
     const { data: batchData, error: batchError } = await supabase
       .from("batches")
       .insert({
-        month,
-        year,
+        // month/year are deliberately not written any more; legacy rows keep
+        // theirs and batches_period_present accepts either period.
+        week_start_date: weekStart,
         status: "draft",
         total_posts: totalPosts,
         scope,
@@ -158,15 +297,17 @@ export async function POST(request: NextRequest) {
 
     // 3. Generate posts — one category at a time
     // Picked headlines, if the user ran a scan. Falls back to the latest scan
-    // for this month when the dialog sent ids but no scan id.
+    // for the calendar month the week starts in when the dialog sent ids but
+    // no scan id — headline_scans is still keyed by month/year, and a week
+    // has to resolve to one of those to look itself up.
     let pickedHeadlines: HeadlineItem[] = [];
     if (Array.isArray(headlineIds) && headlineIds.length > 0) {
       let scanQuery = supabase.from("headline_scans").select("id, items");
       scanQuery = scanId
         ? scanQuery.eq("id", scanId)
         : scanQuery
-            .eq("month", month)
-            .eq("year", year)
+            .eq("month", parseISODate(weekStart).getMonth() + 1)
+            .eq("year", parseISODate(weekStart).getFullYear())
             .order("created_at", { ascending: false })
             .limit(1);
 
@@ -201,7 +342,7 @@ export async function POST(request: NextRequest) {
     const postsByCategory = new Map<ContentCategory, GeneratedPost[]>();
 
     // Per-category counts: flat 2 each in test mode, otherwise apportioned
-    // across the month by CATEGORY_MIX.
+    // across the week by CATEGORY_MIX.
     const categoryCounts = testMode
       ? new Map<ContentCategory, number>(categoriesToGenerate.map((c) => [c, 2]))
       : allocateByMix(totalPosts, categoriesToGenerate);
@@ -217,12 +358,12 @@ export async function POST(request: NextRequest) {
     const interleaved = interleaveCategories(postsByCategory);
 
     // 5. Build schedule
-    const schedule = buildSchedule(month, year, settings, totalPosts);
+    const schedule = buildSchedule(weekStart, settings, totalPosts, takenSlots);
 
-    // 6. Trim posts to fit available schedule slots (shorter months have fewer
-    //    days). Posts that reference a headline go first — news gets stale, so
-    //    it takes the earliest slots in the month. Order is otherwise the
-    //    interleave order, which keeps categories varied within each group.
+    // 6. Trim posts to fit the slots the week actually has left. Posts that
+    //    reference a headline go first — news gets stale, so it takes the
+    //    earliest slots in the week. Order is otherwise the interleave order,
+    //    which keeps categories varied within each group.
     const usesHeadline = (item: (typeof interleaved)[number]) =>
       headlinesForCategory(item.category, pickedHeadlines).length > 0 &&
       typeof item.post.headline_index === "number";
@@ -393,7 +534,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ batchId: batch!.id, totalPosts: postsToSchedule.length });
+    return NextResponse.json({
+      batchId: batch!.id,
+      totalPosts: postsToSchedule.length,
+      weekStart,
+      slotsTotal: SLOTS_PER_WEEK,
+      // What the week has left now this batch has taken its share, so the
+      // dialog can show it without recomputing contention itself.
+      slotsFree: slotsFree - postsToSchedule.length,
+      requestedPosts,
+      shortened: postsToSchedule.length < requestedPosts,
+    });
   } catch (error) {
     console.error("Generation error:", error);
 

@@ -19,7 +19,7 @@ export async function POST(
     // Get the post with image data
     const { data: post, error: fetchError } = await supabase
       .from("posts")
-      .select("id, has_image, image_template_type, image_headline, image_body, image_stat_number, image_stat_label, content_category")
+      .select("id, image_template_type, image_headline, image_body, image_stat_number, image_stat_label, content_category")
       .eq("id", params.id)
       .single();
 
@@ -27,7 +27,7 @@ export async function POST(
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    if (!post.has_image || !post.image_template_type) {
+    if (!post.image_template_type) {
       return NextResponse.json({ error: "Post has no image" }, { status: 400 });
     }
 

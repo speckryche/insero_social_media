@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -49,7 +48,9 @@ export function PostEditSheet({
   const [google, setGoogle] = useState(post.google_content || "");
   const [category, setCategory] = useState(post.content_category);
   const [timeSlot, setTimeSlot] = useState(post.time_slot);
-  const [hasImage, setHasImage] = useState(post.has_image);
+  // Image presence now comes from the scope image URL columns, not has_image.
+  // The template fields below stay editable whenever a template is set.
+  const hasImage = !!post.linkedin_image_url || !!post.image_template_type;
   const [imageTemplate, setImageTemplate] = useState(
     post.image_template_type || ""
   );
@@ -73,7 +74,6 @@ export function PostEditSheet({
           google_content: google,
           content_category: category,
           time_slot: timeSlot,
-          has_image: hasImage,
           image_template_type: hasImage ? imageTemplate || null : null,
           image_headline: hasImage ? imageHeadline || null : null,
           image_body: hasImage ? imageBody || null : null,
@@ -148,14 +148,6 @@ export function PostEditSheet({
 
             {/* Image settings */}
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="has-image"
-                  checked={hasImage}
-                  onCheckedChange={(checked) => setHasImage(checked === true)}
-                />
-                <Label htmlFor="has-image">Has image</Label>
-              </div>
               {hasImage && (
                 <>
                   <Select value={imageTemplate} onValueChange={setImageTemplate}>

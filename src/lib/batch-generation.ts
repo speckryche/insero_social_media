@@ -192,56 +192,46 @@ export interface GeneratedPost {
 export function assignImageTemplate(
   category: ContentCategory,
   indexInCategory: number
-): { has_image: boolean; image_template_type: ImageTemplateType | null } {
+): { image_template_type: ImageTemplateType | null } {
   // Base canvas template per category, before photo templates are mixed in.
-  let base: { has_image: boolean; image_template_type: ImageTemplateType | null };
+  let base: { image_template_type: ImageTemplateType | null };
   switch (category) {
     case "ai_speak":
       // The priority category — most posts carry an image.
-      base = {
-        has_image: true,
-        image_template_type: indexInCategory % 2 === 0 ? "tip_graphic" : "checklist",
+      base = { image_template_type: indexInCategory % 2 === 0 ? "tip_graphic" : "checklist",
       };
       break;
     case "tech_speak":
       base = indexInCategory % 2 === 1
-        ? {
-            has_image: true,
-            image_template_type: indexInCategory % 4 === 1 ? "tip_graphic" : "checklist",
+        ? { image_template_type: indexInCategory % 4 === 1 ? "tip_graphic" : "checklist",
           }
-        : { has_image: false, image_template_type: null };
+        : { image_template_type: null };
       break;
     case "quote_speak":
       base = indexInCategory % 2 === 0
-        ? {
-            has_image: true,
-            image_template_type: indexInCategory % 4 === 0 ? "quote_card" : "savings_highlight",
+        ? { image_template_type: indexInCategory % 4 === 0 ? "quote_card" : "savings_highlight",
           }
-        : { has_image: false, image_template_type: null };
+        : { image_template_type: null };
       break;
     case "cost_speak":
       // No dollar figures allowed in this category, so the stat templates are
       // deliberately not used — comparisons and checklists carry the idea.
       base = indexInCategory % 2 === 0
-        ? {
-            has_image: true,
-            image_template_type: indexInCategory % 4 === 0 ? "comparison" : "checklist",
+        ? { image_template_type: indexInCategory % 4 === 0 ? "comparison" : "checklist",
           }
-        : { has_image: false, image_template_type: null };
+        : { image_template_type: null };
       break;
     case "pots_speak":
       // A running series about what to check and what replaces what — lists
       // and tip cards carry it better than stat or quote templates.
-      base = {
-        has_image: true,
-        image_template_type: indexInCategory % 2 === 0 ? "checklist" : "tip_graphic",
+      base = { image_template_type: indexInCategory % 2 === 0 ? "checklist" : "tip_graphic",
       };
       break;
     case "personal_take":
-      base = { has_image: false, image_template_type: null };
+      base = { image_template_type: null };
       break;
     default:
-      base = { has_image: false, image_template_type: null };
+      base = { image_template_type: null };
   }
 
   // Photo template injection — give the feed a natural mix of overlay,
@@ -251,27 +241,27 @@ export function assignImageTemplate(
 
   if (category === "quote_speak" || category === "personal_take") {
     // 40% overlay_right, 20% overlay_left, 20% photo_landscape, 20% base
-    if (rand < 0.40) return { has_image: true, image_template_type: "photo_overlay_right" };
-    if (rand < 0.60) return { has_image: true, image_template_type: "photo_overlay_left" };
-    if (rand < 0.80) return { has_image: true, image_template_type: "photo_landscape" };
+    if (rand < 0.40) return { image_template_type: "photo_overlay_right" };
+    if (rand < 0.60) return { image_template_type: "photo_overlay_left" };
+    if (rand < 0.80) return { image_template_type: "photo_landscape" };
     return base;
   }
 
   if (category === "tech_speak") {
     // 35% overlay_right, 15% overlay_left, 25% photo_tip, 25% tip_graphic
-    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
-    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
-    if (rand < 0.75) return { has_image: true, image_template_type: "photo_tip" };
-    return { has_image: true, image_template_type: "tip_graphic" };
+    if (rand < 0.35) return { image_template_type: "photo_overlay_right" };
+    if (rand < 0.50) return { image_template_type: "photo_overlay_left" };
+    if (rand < 0.75) return { image_template_type: "photo_tip" };
+    return { image_template_type: "tip_graphic" };
   }
 
   if (category === "ai_speak") {
     // 35% overlay_right, 15% overlay_left, 25% photo_tip, 25% existing canvas.
     // The priority category leans on photo templates so the feed doesn't turn
     // into a wall of graphics.
-    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
-    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
-    if (rand < 0.75) return { has_image: true, image_template_type: "photo_tip" };
+    if (rand < 0.35) return { image_template_type: "photo_overlay_right" };
+    if (rand < 0.50) return { image_template_type: "photo_overlay_left" };
+    if (rand < 0.75) return { image_template_type: "photo_tip" };
     return base;
   }
 
@@ -279,17 +269,17 @@ export function assignImageTemplate(
     // 35% overlay_right, 15% overlay_left, 25% checklist, 25% comparison —
     // value questions read best as lists and before/after pairs. No stat
     // templates: this category may not use numbers.
-    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
-    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
-    if (rand < 0.75) return { has_image: true, image_template_type: "checklist" };
-    return { has_image: true, image_template_type: "comparison" };
+    if (rand < 0.35) return { image_template_type: "photo_overlay_right" };
+    if (rand < 0.50) return { image_template_type: "photo_overlay_left" };
+    if (rand < 0.75) return { image_template_type: "checklist" };
+    return { image_template_type: "comparison" };
   }
 
   if (category === "pots_speak") {
     // 35% overlay_right, 15% overlay_left, rest on the checklist / tip_graphic
     // base — copper posts are practical, so the list templates do the work.
-    if (rand < 0.35) return { has_image: true, image_template_type: "photo_overlay_right" };
-    if (rand < 0.50) return { has_image: true, image_template_type: "photo_overlay_left" };
+    if (rand < 0.35) return { image_template_type: "photo_overlay_right" };
+    if (rand < 0.50) return { image_template_type: "photo_overlay_left" };
     return base;
   }
 

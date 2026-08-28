@@ -234,7 +234,7 @@ export async function POST(
       const indexInCategory = existingInCategory + i;
 
       const image = !includeImages
-        ? { has_image: false, image_template_type: null as ImageTemplateType | null }
+        ? { image_template_type: null as ImageTemplateType | null }
         : assignImageTemplate(category, indexInCategory);
 
       let imageHeadline = includeImages ? post.image_headline || null : null;
@@ -281,7 +281,6 @@ export async function POST(
         google_content: enabledPlatforms.includes("google")
           ? post.google_content
           : "",
-        has_image: image.has_image,
         image_template_type: image.image_template_type,
         image_headline: imageHeadline,
         image_body: imageBody,

@@ -191,7 +191,6 @@ export function GenerateBatchModal() {
         body: JSON.stringify({
           weekStart,
           testMode,
-          includeImages,
           scope,
           postCount: parseInt(postCount),
           scanId,

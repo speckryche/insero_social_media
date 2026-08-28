@@ -28,7 +28,7 @@ export async function POST(
     // Get the current post to know its category and image fields
     const { data: post, error: fetchError } = await supabase
       .from("posts")
-      .select("content_category, has_image, image_template_type")
+      .select("content_category, linkedin_image_url, image_template_type")
       .eq("id", params.id)
       .single();
 
@@ -138,11 +138,15 @@ No markdown fences.`,
     }
 
     // Default: regenerate all 5 fields
-    const imageFields = post.has_image
+    // A post carries image copy when it has an image attached — the URL
+    // column, not the retired has_image flag.
+    const postHasImage = !!post.linkedin_image_url;
+
+    const imageFields = postHasImage
       ? `\nAlso generate image data:\n- "image_headline": Short headline (max 8 words)\n- "image_body": Supporting text (max 15 words)\n- "image_stat_number": Key stat (e.g., "73%"). Use "" if not applicable.\n- "image_stat_label": Label for stat. Use "" if not applicable.`
       : "";
 
-    const imageJson = post.has_image
+    const imageJson = postHasImage
       ? `,\n  "image_headline": "...",\n  "image_body": "...",\n  "image_stat_number": "...",\n  "image_stat_label": "..."`
       : "";
 
@@ -206,7 +210,7 @@ No markdown fences.`,
       status: "draft",
     };
 
-    if (post.has_image) {
+    if (postHasImage) {
       update.image_headline = generated.image_headline || null;
       update.image_body = generated.image_body || null;
       update.image_stat_number = generated.image_stat_number || null;

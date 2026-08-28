@@ -426,10 +426,9 @@ export async function POST(request: NextRequest) {
       const sched = schedule[index];
 
       const image = !includeImages
-        ? { has_image: false, image_template_type: null as ImageTemplateType | null }
+        ? { image_template_type: null as ImageTemplateType | null }
         : testMode
         ? {
-            has_image: true,
             image_template_type:
               TEST_MODE_TEMPLATES[item.category]?.[item.indexInCategory] || "stat_card",
           }
@@ -491,7 +490,6 @@ export async function POST(request: NextRequest) {
         google_content: enabledPlatforms.includes("google")
           ? item.post.google_content
           : "",
-        has_image: image.has_image,
         image_template_type: image.image_template_type,
         image_headline: imageHeadline,
         image_body: imageBody,
@@ -506,7 +504,7 @@ export async function POST(request: NextRequest) {
     const { data: insertedPosts, error: insertError } = await supabase
       .from("posts")
       .insert(postsToInsert)
-      .select("id, has_image, image_template_type, image_headline, image_body, image_stat_number, image_stat_label, content_category");
+      .select("id, image_template_type, image_headline, image_body, image_stat_number, image_stat_label, content_category");
 
     if (insertError) {
       console.error("Post insertion error:", insertError);
@@ -518,10 +516,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 9. Generate images for posts with has_image: true (non-blocking).
+    // 9. Render images for posts that were given a template (non-blocking).
     // Skipped entirely when includeImages is false.
     if (insertedPosts && includeImages) {
-      const postsWithImages = insertedPosts.filter((p) => p.has_image);
+      const postsWithImages = insertedPosts.filter((p) => p.image_template_type);
       const baseUrl = request.nextUrl.origin;
 
       // Fire image generation but don't await — let it run in background

@@ -32,7 +32,9 @@ interface PostData {
   facebook_image_url?: string | null;
   google_image_url?: string | null;
   linkedin_personal_image_url?: string | null;
-  has_image: boolean;
+  // Retained on the row but no longer read: image presence is whether the
+  // scope's image URL column is set.
+  has_image?: boolean;
   linkedin_personal_approved?: boolean;
   linkedin_company_approved?: boolean;
 }
@@ -107,12 +109,8 @@ export async function publishPost(post: PostData): Promise<PublishPostResult> {
   }
 
   // Per-platform image URLs with a fallback to the legacy image_url column.
-  const companyImage = post.has_image
-    ? post.linkedin_image_url || post.image_url || undefined
-    : undefined;
-  const personalImage = post.has_image
-    ? post.linkedin_personal_image_url || undefined
-    : undefined;
+  const companyImage = post.linkedin_image_url || post.image_url || undefined;
+  const personalImage = post.linkedin_personal_image_url || undefined;
 
   // Log what's firing so the dev server output makes it obvious which
   // variants are being attempted and which are being skipped.
@@ -217,9 +215,7 @@ export async function publishPersonalPost(post: PostData): Promise<PublishResult
   }
 
   const supabase = getSupabase();
-  const personalImage = post.has_image && post.linkedin_personal_image_url
-    ? post.linkedin_personal_image_url
-    : undefined;
+  const personalImage = post.linkedin_personal_image_url || undefined;
 
   try {
     // Publish using personal profile — the LinkedIn publisher uses getAuthorUrn
@@ -254,10 +250,10 @@ export async function retryFailedPlatforms(
 ): Promise<PublishAllResult> {
   const supabase = getSupabase();
 
-  const linkedinImage = post.has_image && post.linkedin_image_url ? post.linkedin_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
-  const xImage = post.has_image && post.x_image_url ? post.x_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
-  const facebookImage = post.has_image && post.facebook_image_url ? post.facebook_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
-  const googleImage = post.has_image && post.google_image_url ? post.google_image_url : (post.has_image && post.image_url ? post.image_url : undefined);
+  const linkedinImage = post.linkedin_image_url || post.image_url || undefined;
+  const xImage = post.x_image_url || post.image_url || undefined;
+  const facebookImage = post.facebook_image_url || post.image_url || undefined;
+  const googleImage = post.google_image_url || post.image_url || undefined;
 
   // Only retry platforms that failed — and only ones that are switched on.
   // A disabled platform reports success so it neither blocks the post nor

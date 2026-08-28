@@ -56,11 +56,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Switch } from "@/components/ui/switch";
 import { PostEditSheet } from "@/components/post-edit-sheet";
 import { PostPreviewModal } from "@/components/post-preview-modal";
 import { LearnFromEditsDialog } from "@/components/learn-from-edits-dialog";
 import { AddPostsDialog } from "@/components/add-posts-dialog";
+import { PostImageDropZone } from "@/components/post-image-drop-zone";
 import {
   BATCH_SCOPE_LABELS,
   BATCH_SCOPE_STYLES,
@@ -123,26 +123,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   savings_story: "Savings Story",
   industry_tip: "Industry Tip",
   myth_busting: "Myth Busting",
-};
-
-// Default image template to assign when a user toggles "Include image" on a
-// post that has no image_template_type set (e.g., a text-only batch).
-const DEFAULT_TEMPLATE_BY_CATEGORY: Record<string, string> = {
-  ai_speak: "photo_tip",
-  tech_speak: "checklist",
-  quote_speak: "photo_landscape",
-  cost_speak: "comparison",
-  pots_speak: "checklist",
-  personal_take: "photo_landscape",
-  // Legacy categories — see note above.
-  humor_speak: "quote_card",
-  bill_speak: "photo_stat",
-  contract_speak: "checklist",
-  // Legacy categories — see note above.
-  did_you_know: "photo_stat",
-  savings_story: "photo_landscape",
-  industry_tip: "photo_tip",
-  myth_busting: "myth_buster",
 };
 
 // All 12 templates the user can pick from the per-post template selector.
@@ -401,8 +381,6 @@ export function BatchReview({
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [previewingPost, setPreviewingPost] = useState<Post | null>(null);
   const [regeneratingImageId, setRegeneratingImageId] = useState<string | null>(null);
-  const [togglingImageId, setTogglingImageId] = useState<string | null>(null);
-  const [autoAddingImageId, setAutoAddingImageId] = useState<string | null>(null);
   // Cards show full post text by default. Ids land here only when the user
   // collapses that card back down to a four-line preview.
   const [collapsedPostIds, setCollapsedPostIds] = useState<Set<string>>(new Set());
@@ -709,111 +687,9 @@ export function BatchReview({
     }
   }
 
-  async function handleToggleImage(post: Post) {
-    const turningOn = !post.has_image;
-
-    // Turning OFF — clear has_image and the per-platform URLs, preserve
-    // image_template_type / image_headline so toggling back ON still works.
-    if (!turningOn) {
-      setTogglingImageId(post.id);
-      try {
-        const patchRes = await fetch(`/api/posts/${post.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            has_image: false,
-            linkedin_image_url: null,
-            x_image_url: null,
-            facebook_image_url: null,
-            google_image_url: null,
-            linkedin_personal_image_url: null,
-            status: post.status,
-          }),
-        });
-        if (patchRes.ok) {
-          const updated = await patchRes.json();
-          setPosts(posts.map((p) => (p.id === post.id ? updated : p)));
-        }
-      } finally {
-        setTogglingImageId(null);
-      }
-      return;
-    }
-
-    // Turning ON, post already has image_template_type + headline/body — just
-    // flip the flag and render images.
-    if (post.image_template_type) {
-      setTogglingImageId(post.id);
-      try {
-        const patchRes = await fetch(`/api/posts/${post.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ has_image: true, status: post.status }),
-        });
-        if (!patchRes.ok) return;
-
-        const genRes = await fetch(`/api/posts/${post.id}/regenerate-image`, {
-          method: "POST",
-        });
-        if (!genRes.ok) {
-          await fetch(`/api/posts/${post.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ has_image: false, status: post.status }),
-          });
-          return;
-        }
-        const updated = await genRes.json();
-        setPosts(posts.map((p) => (p.id === post.id ? updated : p)));
-      } finally {
-        setTogglingImageId(null);
-      }
-      return;
-    }
-
-    // Auto-add flow: turning ON a text-only post with no template. Pick a
-    // default template by category, persist it, regenerate the post so the
-    // LLM produces image_headline/image_body (the regenerate route includes
-    // image fields when has_image is true), then render the image.
-    setAutoAddingImageId(post.id);
-    try {
-      const defaultTemplate =
-        DEFAULT_TEMPLATE_BY_CATEGORY[post.content_category as string] ?? "stat_card";
-
-      const patchRes = await fetch(`/api/posts/${post.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          has_image: true,
-          image_template_type: defaultTemplate,
-          status: post.status,
-        }),
-      });
-      if (!patchRes.ok) return;
-
-      const regenRes = await fetch(`/api/posts/${post.id}/regenerate`, {
-        method: "POST",
-      });
-      if (!regenRes.ok) {
-        // Roll back the flag if regeneration fails so the toggle reflects reality
-        await fetch(`/api/posts/${post.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ has_image: false, status: post.status }),
-        });
-        return;
-      }
-
-      const renderRes = await fetch(`/api/posts/${post.id}/regenerate-image`, {
-        method: "POST",
-      });
-      if (renderRes.ok) {
-        const updated = await renderRes.json();
-        setPosts(posts.map((p) => (p.id === post.id ? updated : p)));
-      }
-    } finally {
-      setAutoAddingImageId(null);
-    }
+  // The drop zones own image state now; they hand back the updated row.
+  function handlePostImageUpdated(updated: Post) {
+    setPosts(posts.map((p) => (p.id === updated.id ? updated : p)));
   }
 
   function handlePostSaved(updatedPost: Post) {
@@ -1297,24 +1173,16 @@ export function BatchReview({
                     {CATEGORY_LABELS[post.content_category] || post.content_category}
                   </Badge>
                   {/* Image status indicator — quick visual scan */}
-                  {togglingImageId === post.id || autoAddingImageId === post.id ? (
-                    <span title="Image generation in progress" className="inline-flex items-center">
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                    </span>
-                  ) : post.has_image && post.linkedin_image_url ? (
-                    <span title="Image generated and ready" className="inline-flex items-center">
+                  {post.linkedin_image_url || post.linkedin_personal_image_url ? (
+                    <span title="Image attached" className="inline-flex items-center">
                       <Camera className="h-4 w-4 text-green-600" />
-                    </span>
-                  ) : post.has_image ? (
-                    <span title="Image pending" className="inline-flex items-center">
-                      <Camera className="h-4 w-4 text-gray-400" />
                     </span>
                   ) : (
                     <span title="No image for this post" className="inline-flex items-center">
                       <CameraOff className="h-4 w-4 text-gray-300" />
                     </span>
                   )}
-                  {post.has_image && post.image_template_type && (
+                  {post.linkedin_image_url && post.image_template_type && (
                     <Badge variant="secondary" className="text-xs gap-1">
                       <ImageIcon className="h-3 w-3" />
                       {post.image_template_type}
@@ -1385,6 +1253,14 @@ export function BatchReview({
                   >
                     {post.linkedin_personal_content || "No personal content"}
                   </p>
+                  <PostImageDropZone
+                    post={post}
+                    scope="personal"
+                    imageUrl={post.linkedin_personal_image_url || null}
+                    enabled={scopeContent(post, "personal").length > 0}
+                    onUpdated={handlePostImageUpdated}
+                    onNotice={showNotice}
+                  />
                 </div>
                 <div className="border rounded-lg p-3">
                   <div className="flex items-center justify-between mb-2">
@@ -1419,33 +1295,27 @@ export function BatchReview({
                   >
                     {post.linkedin_content}
                   </p>
+                  <PostImageDropZone
+                    post={post}
+                    scope="company"
+                    imageUrl={post.linkedin_image_url || null}
+                    enabled={scopeContent(post, "company").length > 0}
+                    onUpdated={handlePostImageUpdated}
+                    onNotice={showNotice}
+                  />
                 </div>
               </div>
 
-              {/* Image control row — toggle, status, thumbnail, regenerate */}
+              {/* Template controls for a generated company image. The
+                  include-image toggle that used to lead this row is gone —
+                  the drop zones above are the switch now, and an image exists
+                  when its scope's URL column is set. */}
               <div className="mb-3 flex items-center gap-3 flex-wrap">
-                <Switch
-                  checked={post.has_image}
-                  onCheckedChange={() => handleToggleImage(post)}
-                  disabled={togglingImageId === post.id || autoAddingImageId === post.id}
-                  aria-label="Include image for this post"
-                />
-                <span className="text-xs font-medium text-gray-700">Include image</span>
-                {autoAddingImageId === post.id ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-blue-600">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Adding image…
-                  </span>
-                ) : togglingImageId === post.id ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
-                ) : null}
-                {post.has_image && post.linkedin_image_url && (
+                {post.linkedin_image_url && post.image_template_type && (
                   <>
-                    <img
-                      src={post.linkedin_image_url}
-                      alt="Post image"
-                      className="h-16 w-auto rounded border ml-auto"
-                    />
+                    <span className="text-xs font-medium text-gray-700">
+                      Generated image
+                    </span>
                     <Select
                       value={post.image_template_type || undefined}
                       onValueChange={(v) => handleChangeTemplate(post, v)}

@@ -76,7 +76,7 @@ export function PostPreviewModal({
                 <p className="text-sm text-gray-800 whitespace-pre-line leading-relaxed">
                   {post.linkedin_personal_content || "No personal content"}
                 </p>
-                {post.has_image && post.linkedin_personal_image_url && (
+                {post.linkedin_personal_image_url && (
                   <img
                     src={post.linkedin_personal_image_url}
                     alt="Post image"
@@ -100,7 +100,7 @@ export function PostPreviewModal({
                 <p className="text-sm text-gray-800 whitespace-pre-line leading-relaxed">
                   {post.linkedin_content}
                 </p>
-                {post.has_image && post.linkedin_image_url && (
+                {post.linkedin_image_url && (
                   <img
                     src={post.linkedin_image_url}
                     alt="Post image"
@@ -125,7 +125,7 @@ export function PostPreviewModal({
                 <p className="text-[15px] text-gray-900 leading-snug">
                   {post.x_content}
                 </p>
-                {post.has_image && post.x_image_url && (
+                {post.x_image_url && (
                   <img
                     src={post.x_image_url}
                     alt="Post image"
@@ -163,7 +163,7 @@ export function PostPreviewModal({
                   <p className="text-sm text-gray-800 whitespace-pre-line">
                     {post.facebook_content}
                   </p>
-                  {post.has_image && post.facebook_image_url && (
+                  {post.facebook_image_url && (
                     <img
                       src={post.facebook_image_url}
                       alt="Post image"
@@ -192,7 +192,7 @@ export function PostPreviewModal({
                 <p className="text-sm text-gray-800 whitespace-pre-line">
                   {post.google_content}
                 </p>
-                {post.has_image && post.google_image_url && (
+                {post.google_image_url && (
                   <img
                     src={post.google_image_url}
                     alt="Post image"

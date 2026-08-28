@@ -15,11 +15,7 @@ import {
 } from "lucide-react";
 import { GenerateBatchModal } from "@/components/generate-batch-modal";
 import Link from "next/link";
-
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+import { batchPeriodLabel } from "@/lib/batch-period";
 
 const STATUS_DOT: Record<string, string> = {
   scheduled: "bg-blue-400",
@@ -109,7 +105,7 @@ export default function DashboardPage() {
                   href={`/batches/${batch.id}`}
                   className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors"
                 >
-                  {MONTHS[batch.month - 1]} {batch.year}
+                  {batchPeriodLabel(batch)}
                 </Link>
                 <span className="text-sm text-gray-500">
                   {progress?.published || 0}/{progress?.total || 0} published

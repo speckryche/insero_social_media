@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Plus, CheckCircle2 } from "lucide-react";
+import { SLOTS_PER_WEEK, formatWeekRange } from "@/lib/week";
 
 // Categories by batch scope. A NULL scope predates the column and covered
 // everything, same as "both".
@@ -44,6 +45,8 @@ const COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 interface AddPostsDialogProps {
   batchId: string;
   scope: string | null | undefined;
+  /** The batch's Monday, or null for a legacy monthly batch. */
+  weekStart?: string | null;
   onClose: () => void;
   onAdded: () => void;
 }
@@ -51,6 +54,7 @@ interface AddPostsDialogProps {
 export function AddPostsDialog({
   batchId,
   scope,
+  weekStart = null,
   onClose,
   onAdded,
 }: AddPostsDialogProps) {
@@ -62,6 +66,36 @@ export function AddPostsDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [added, setAdded] = useState<number | null>(null);
+
+  // A weekly batch shares its week with any other batch in the same scope
+  // lane, so what is actually addable is whatever that lane has left. Read it
+  // from the generate route — the same source the Generate dialog uses and the
+  // same logic the add-posts route enforces — rather than counting here.
+  const [slotsFree, setSlotsFree] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!weekStart) return;
+    let cancelled = false;
+
+    fetch(
+      `/api/generate-batch?weekStart=${encodeURIComponent(weekStart)}&scope=${scope || "both"}`
+    )
+      .then(async (res) => {
+        const data = await res.json();
+        if (!cancelled && res.ok) setSlotsFree(data.slotsFree);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [weekStart, scope]);
+
+  // Never offer more than the week can take. Legacy monthly batches keep the
+  // full range, since a month has slots to spare.
+  const maxAddable = weekStart && slotsFree !== null ? slotsFree : COUNTS.length;
+  const countOptions = COUNTS.filter((n) => n <= Math.max(maxAddable, 1));
+  const noSlots = weekStart !== null && slotsFree === 0;
 
   async function handleAdd() {
     setLoading(true);
@@ -98,6 +132,8 @@ export function AddPostsDialog({
           <DialogDescription>
             {added !== null
               ? "Added to this batch."
+              : weekStart
+              ? `Generates more posts into this batch, scheduled into unused slots in ${formatWeekRange(weekStart)}.`
               : "Generates more posts into this batch, scheduled into unused slots in the month."}
           </DialogDescription>
         </DialogHeader>
@@ -143,13 +179,20 @@ export function AddPostsDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {COUNTS.map((n) => (
+                  {countOptions.map((n) => (
                     <SelectItem key={n} value={String(n)}>
                       {n}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {weekStart && (
+                <p className="text-xs text-gray-400">
+                  {slotsFree === null
+                    ? "Checking slots…"
+                    : `${slotsFree} of ${SLOTS_PER_WEEK} slots free this week.`}
+                </p>
+              )}
             </div>
 
             <div className="flex items-start space-x-2">
@@ -164,7 +207,7 @@ export function AddPostsDialog({
               >
                 Use picked headlines
                 <span className="block text-xs text-gray-400">
-                  Reuses the picks from the most recent scan for this month.
+                  Reuses the picks from the most recent scan for this week.
                   Only some categories accept headlines.
                 </span>
               </Label>
@@ -190,7 +233,7 @@ export function AddPostsDialog({
               </Button>
               <Button
                 onClick={handleAdd}
-                disabled={loading}
+                disabled={loading || noSlots}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 {loading ? (
@@ -198,7 +241,7 @@ export function AddPostsDialog({
                 ) : (
                   <Plus className="h-4 w-4 mr-1.5" />
                 )}
-                Add {count}
+                {noSlots ? "Week is full" : `Add ${count}`}
               </Button>
             </>
           )}

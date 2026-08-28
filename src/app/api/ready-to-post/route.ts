@@ -16,12 +16,16 @@ export async function GET() {
     // Find the active batch
     const { data: batch } = await supabase
       .from("batches")
-      .select("id")
+      .select("id, week_start_date, month, year")
       .eq("status", "active")
       .maybeSingle();
 
     if (!batch) {
-      return NextResponse.json({ posts: [], stats: { posted: 0, total: 0 } });
+      return NextResponse.json({
+        posts: [],
+        stats: { posted: 0, total: 0 },
+        batchPeriod: null,
+      });
     }
 
     const { data: posts, error } = await supabase
@@ -42,6 +46,13 @@ export async function GET() {
     return NextResponse.json({
       posts: posts || [],
       stats: { posted, total },
+      // These posts all belong to the active batch, so the page labels itself
+      // with that batch's period rather than the calendar month.
+      batchPeriod: {
+        week_start_date: batch.week_start_date ?? null,
+        month: batch.month ?? null,
+        year: batch.year ?? null,
+      },
     });
   } catch (error) {
     return NextResponse.json(

@@ -65,16 +65,12 @@ import {
   BATCH_SCOPE_STYLES,
   batchScopeKey,
 } from "@/lib/batch-scope";
+import { batchPeriodLabel } from "@/lib/batch-period";
 import {
   DEFAULT_ENABLED_PLATFORMS,
   OPTIONAL_PLATFORMS,
   type Platform,
 } from "@/lib/platforms";
-
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-yellow-100 text-yellow-800",
@@ -718,7 +714,7 @@ export function BatchReview({
           <div>
             <div className="flex items-center gap-3">
               <h2 className="text-xl font-semibold text-gray-900">
-                {MONTHS[batch.month - 1]} {batch.year}
+                {batchPeriodLabel(batch)}
               </h2>
               <Badge
                 className={BATCH_STATUS_STYLES[batch.status] || ""}
@@ -1561,6 +1557,9 @@ export function BatchReview({
         <AddPostsDialog
           batchId={batch.id}
           scope={batch.scope}
+          // Null on the legacy monthly batches, which schedule across a whole
+          // month and have no per-week slot budget to show.
+          weekStart={batch.week_start_date ?? null}
           onClose={() => setAddingPosts(false)}
           // Pull the batch and its posts fresh so the new rows appear in the
           // list, in schedule order, without a manual reload.

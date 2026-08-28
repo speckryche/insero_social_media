@@ -11,6 +11,7 @@ import {
   Loader2,
   ClipboardCheck,
 } from "lucide-react";
+import { batchPeriodLabel, type BatchPeriod } from "@/lib/batch-period";
 
 const CATEGORY_LABELS: Record<string, string> = {
   ai_speak: "AI Speak",
@@ -53,6 +54,7 @@ type Post = any;
 export default function ReadyToPostPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [stats, setStats] = useState({ posted: 0, total: 0 });
+  const [batchPeriod, setBatchPeriod] = useState<BatchPeriod | null>(null);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
@@ -66,6 +68,7 @@ export default function ReadyToPostPage() {
           const data = await res.json();
           setPosts(data.posts || []);
           setStats(data.stats || { posted: 0, total: 0 });
+          setBatchPeriod(data.batchPeriod ?? null);
         }
       } finally {
         setLoading(false);
@@ -123,7 +126,8 @@ export default function ReadyToPostPage() {
           </p>
         </div>
         <Badge variant="outline" className="text-sm px-3 py-1">
-          {stats.posted} of {stats.total} shared this month
+          {stats.posted} of {stats.total} shared
+          {batchPeriod ? ` · ${batchPeriodLabel(batchPeriod)}` : ""}
         </Badge>
       </div>
 

@@ -9,11 +9,11 @@ import {
   BATCH_SCOPE_STYLES,
   batchScopeKey,
 } from "@/lib/batch-scope";
-
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+import {
+  batchPeriodLabel,
+  batchPeriodBadge,
+  compareBatchesByPeriodDesc,
+} from "@/lib/batch-period";
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -27,10 +27,14 @@ export const dynamic = "force-dynamic";
 export default async function BatchesPage() {
   const supabase = createClient();
 
-  const { data: batches } = await supabase
+  const { data: rawBatches } = await supabase
     .from("batches")
     .select("*")
     .order("created_at", { ascending: false });
+
+  // Newest week first, with the legacy monthly batches after them. Sorted here
+  // rather than in the query because the two eras order on different columns.
+  const batches = [...(rawBatches || [])].sort(compareBatchesByPeriodDesc);
 
   // Get approved counts for each batch
   const batchIds = batches?.map((b) => b.id) || [];
@@ -59,7 +63,7 @@ export default async function BatchesPage() {
         <GenerateBatchModal />
       </div>
 
-      {!batches || batches.length === 0 ? (
+      {batches.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center py-12 text-center">
             <CalendarDays className="h-10 w-10 text-gray-300 mb-3" />
@@ -73,6 +77,7 @@ export default async function BatchesPage() {
         <div className="space-y-3">
           {batches.map((batch) => {
             const approved = approvedCounts[batch.id] || 0;
+            const badge = batchPeriodBadge(batch);
             return (
               <Link key={batch.id} href={`/batches/${batch.id}`}>
                 <Card className="hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer">
@@ -80,15 +85,15 @@ export default async function BatchesPage() {
                     <div className="flex items-center gap-4">
                       <div className="flex flex-col items-center justify-center w-14 h-14 rounded-lg bg-gray-50 border">
                         <span className="text-xs text-gray-400 uppercase leading-tight">
-                          {MONTHS[batch.month - 1]?.slice(0, 3)}
+                          {badge.top}
                         </span>
                         <span className="text-lg font-bold text-gray-900">
-                          {batch.year}
+                          {badge.bottom}
                         </span>
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">
-                          {MONTHS[batch.month - 1]} {batch.year}
+                          {batchPeriodLabel(batch)}
                         </p>
                         <p className="text-sm text-gray-500">
                           {approved}/{batch.total_posts} approved &middot;{" "}

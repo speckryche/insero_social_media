@@ -7,7 +7,7 @@ import { Upload, Loader2, X, ImageOff } from "lucide-react";
 export type ImageScope = "company" | "personal";
 
 const ACCEPTED_TYPES = ["image/png", "image/jpeg"];
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_BYTES = 20 * 1024 * 1024;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Post = any;
@@ -55,7 +55,7 @@ export function PostImageDropZone({
     }
     if (file.size > MAX_BYTES) {
       onNotice(
-        `${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is 5 MB.`
+        `${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is 20 MB.`
       );
       return;
     }

@@ -15,7 +15,7 @@ function getSupabase() {
 const BUCKET = "post-images";
 
 // Route files may only export route handlers and Next's config fields.
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 const EXTENSION_BY_TYPE: Record<string, string> = {
   "image/png": "png",
@@ -74,7 +74,7 @@ export async function POST(
     }
     if (file.size > MAX_UPLOAD_BYTES) {
       return NextResponse.json(
-        { error: "Images must be 5 MB or smaller." },
+        { error: "Images must be 20 MB or smaller." },
         { status: 400 }
       );
     }

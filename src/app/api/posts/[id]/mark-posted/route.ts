@@ -25,8 +25,8 @@ const CONTENT_COLUMN: Record<Scope, string> = {
 };
 
 // publish_logs.platform is CHECK-constrained to the four platform names, so
-// both scopes log as "linkedin" — the same folding publishPost does. The rows
-// are told apart by source, not by scope.
+// both scopes log as "linkedin" — the same folding publishPost does. The
+// scope column is what tells the two destinations apart.
 const LOG_PLATFORM = "linkedin";
 
 function hasContent(post: Record<string, unknown>, scope: Scope): boolean {
@@ -116,32 +116,20 @@ export async function POST(
     // Keep the Publish Log in step. A logging failure must not fail the call —
     // the post row is already correct, which is what the UI reads.
     if (undo) {
-      // Both scopes log under platform "linkedin", so a post with both marked
-      // has two indistinguishable manual rows. Drop the newest one: undoing
-      // reverses the most recent mark, and the count stays right either way.
-      const { data: stale } = await supabase
+      const { error: deleteError } = await supabase
         .from("publish_logs")
-        .select("id")
+        .delete()
         .eq("post_id", params.id)
-        .eq("platform", LOG_PLATFORM)
         .eq("source", "manual")
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      const staleId = stale?.[0]?.id;
-      if (staleId) {
-        const { error: deleteError } = await supabase
-          .from("publish_logs")
-          .delete()
-          .eq("id", staleId);
-        if (deleteError) {
-          console.error("[mark-posted] could not remove log row:", deleteError);
-        }
+        .eq("scope", scope);
+      if (deleteError) {
+        console.error("[mark-posted] could not remove log row:", deleteError);
       }
     } else {
       const { error: logError } = await supabase.from("publish_logs").insert({
         post_id: params.id,
         platform: LOG_PLATFORM,
+        scope,
         status: "success",
         source: "manual",
         // Nothing came back from an API — the post was shared by hand.

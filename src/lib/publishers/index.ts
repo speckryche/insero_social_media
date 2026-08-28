@@ -60,12 +60,15 @@ export interface PublishPostResult {
 async function logResult(
   postId: string,
   platform: Platform,
-  result: PublishResult
+  result: PublishResult,
+  // Only LinkedIn has two destinations to tell apart. Null everywhere else.
+  scope: "company" | "personal" | null = null
 ) {
   const supabase = getSupabase();
   await supabase.from("publish_logs").insert({
     post_id: postId,
     platform,
+    scope,
     status: result.success ? "success" : "failed",
     post_id_returned: result.postId || null,
     error_message: result.error || null,
@@ -145,12 +148,15 @@ export async function publishPost(post: PostData): Promise<PublishPostResult> {
     );
   }
 
-  // Log to publish_logs. The CHECK on publish_logs.platform only allows the
-  // four legacy platforms, so the personal variant is folded into "linkedin"
-  // here (consistent with how publishPersonalPost behaves: it doesn't write
-  // a separate log row).
+  // Log to publish_logs. The CHECK on publish_logs.platform still only allows
+  // the four legacy platforms, so both LinkedIn destinations are folded into
+  // "linkedin" — scope is what tells them apart now, which is why the personal
+  // result gets its own row rather than being dropped.
   if (companyResult) {
-    await logResult(post.id, "linkedin", companyResult);
+    await logResult(post.id, "linkedin", companyResult, "company");
+  }
+  if (personalResult) {
+    await logResult(post.id, "linkedin", personalResult, "personal");
   }
 
   // Distinguish "expected" company failures from real ones. Until we have
@@ -289,7 +295,10 @@ export async function retryFailedPlatforms(
   // Log retried platforms
   const logPromises: Promise<void>[] = [];
   if (!post.linkedin_published)
-    logPromises.push(logResult(post.id, "linkedin", results.linkedin));
+    logPromises.push(
+      // The retry path only ever re-runs the company variant.
+      logResult(post.id, "linkedin", results.linkedin, "company")
+    );
   if (!post.x_published)
     logPromises.push(logResult(post.id, "x", results.x));
   if (!post.facebook_published)

@@ -19,6 +19,11 @@ const PLATFORM_LABELS: Record<string, string> = {
   google: "Google",
 };
 
+const SCOPE_LABELS: Record<string, string> = {
+  company: "Company",
+  personal: "Personal",
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type LogEntry = any;
 
@@ -115,6 +120,9 @@ export default function LogsPage() {
                           className="text-xs capitalize"
                         >
                           {PLATFORM_LABELS[log.platform] || log.platform}
+                          {/* LinkedIn has two destinations; older rows and the
+                              other platforms carry no scope and read as before. */}
+                          {log.scope ? ` · ${SCOPE_LABELS[log.scope] || log.scope}` : ""}
                         </Badge>
                         <Badge
                           className={`text-xs ${

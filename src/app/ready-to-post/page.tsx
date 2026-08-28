@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { batchLabel, type BatchPeriod } from "@/lib/batch-period";
+import { isFutureDate } from "@/lib/post-status";
 
 const CATEGORY_LABELS: Record<string, string> = {
   ai_speak: "AI Speak",
@@ -77,9 +78,13 @@ export default function ReadyToPostPage() {
     load();
   }, []);
 
+  // Queued in LinkedIn for a future date is not the same as shared.
+  const hasPosted = (p: Post) =>
+    !!p.linkedin_personal_published && !isFutureDate(p.published_at);
+
   const filteredPosts = useMemo(() => {
-    if (filter === "posted") return posts.filter((p) => p.linkedin_personal_published);
-    if (filter === "not-posted") return posts.filter((p) => !p.linkedin_personal_published);
+    if (filter === "posted") return posts.filter(hasPosted);
+    if (filter === "not-posted") return posts.filter((p) => !hasPosted(p));
     return posts;
   }, [posts, filter]);
 
@@ -136,10 +141,10 @@ export default function ReadyToPostPage() {
         <TabsList className="grid w-full grid-cols-3 h-9">
           <TabsTrigger value="all" className="text-xs">All ({posts.length})</TabsTrigger>
           <TabsTrigger value="not-posted" className="text-xs">
-            Not Yet Posted ({posts.filter((p) => !p.linkedin_personal_published).length})
+            Not Yet Posted ({posts.filter((p) => !hasPosted(p)).length})
           </TabsTrigger>
           <TabsTrigger value="posted" className="text-xs">
-            Posted ({posts.filter((p) => p.linkedin_personal_published).length})
+            Posted ({posts.filter(hasPosted).length})
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -159,7 +164,7 @@ export default function ReadyToPostPage() {
       ) : (
         <div className="space-y-3">
           {filteredPosts.map((post) => (
-            <Card key={post.id} className={post.linkedin_personal_published ? "opacity-60" : ""}>
+            <Card key={post.id} className={hasPosted(post) ? "opacity-60" : ""}>
               <CardHeader className="pb-2 px-5 pt-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -186,7 +191,7 @@ export default function ReadyToPostPage() {
                       {CATEGORY_LABELS[post.content_category] || post.content_category}
                     </Badge>
                   </div>
-                  {post.linkedin_personal_published && (
+                  {hasPosted(post) && (
                     <Badge className="bg-green-100 text-green-800 text-xs">
                       <CheckCircle2 className="h-3 w-3 mr-1" />
                       Posted
@@ -207,7 +212,7 @@ export default function ReadyToPostPage() {
                   />
                 )}
 
-                {!post.linkedin_personal_published && (
+                {!hasPosted(post) && (
                   <div className="flex items-center gap-2 pt-3 border-t">
                     <Button
                       variant="outline"

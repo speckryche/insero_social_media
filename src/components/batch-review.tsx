@@ -4,6 +4,8 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -34,6 +36,7 @@ import {
   CheckCheck,
   Send,
   X,
+  Clock,
   RotateCcw,
   XCircle,
   AlertTriangle,
@@ -67,6 +70,12 @@ import {
   batchScopeKey,
 } from "@/lib/batch-scope";
 import { batchLabel, legacyPeriodLabel } from "@/lib/batch-period";
+import {
+  isFutureDate,
+  postedLabel,
+  postedOnLabel,
+} from "@/lib/post-status";
+import { todayISO } from "@/lib/notes";
 import {
   DEFAULT_ENABLED_PLATFORMS,
   OPTIONAL_PLATFORMS,
@@ -149,17 +158,6 @@ function isScopePublished(post: Post, scope: Scope): boolean {
   return scope === "company"
     ? post.linkedin_published === true
     : post.linkedin_personal_published === true;
-}
-
-// " · Aug 28" — the day it went out, when we know it.
-function postedOnLabel(post: Post): string {
-  if (!post.published_at) return "";
-  const when = new Date(post.published_at);
-  if (Number.isNaN(when.getTime())) return "";
-  return ` · ${when.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  })}`;
 }
 
 function isFullyApproved(post: Post): boolean {
@@ -274,7 +272,7 @@ function ScopePanel({
   onEdit: () => void;
   onRegenerate: () => void;
   onToggleApprove: () => void;
-  onMarkPosted: (undo: boolean) => void;
+  onMarkPosted: (undo: boolean, postedOn?: string) => void;
   markingPosted: boolean;
   onImageUpdated: (post: Post) => void;
   onNotice: (text: string) => void;
@@ -287,6 +285,9 @@ function ScopePanel({
   const approved = isScopeApproved(post, scope);
   const published = isScopePublished(post, scope);
   const Icon = scope === "personal" ? User : Building2;
+  // The date popover, open only while a date is being chosen.
+  const [pickingDate, setPickingDate] = useState(false);
+  const [postedOn, setPostedOn] = useState(todayISO);
 
   return (
     <div className={`rounded-lg border p-3 ${style.accent}`}>
@@ -367,8 +368,15 @@ function ScopePanel({
           // mis-click — the only way back from here.
           <div className="flex items-center justify-center gap-1.5">
             <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-              <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-              Posted manually{postedOnLabel(post)}
+              {/* A future date means it is queued in LinkedIn, not live yet.
+                  Blue, never a warning colour — nothing is wrong. */}
+              {isFutureDate(post.published_at) ? (
+                <Clock className="h-3.5 w-3.5 text-blue-600" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+              )}
+              {postedLabel(post.published_at)}
+              {postedOnLabel(post.published_at)}
             </span>
             <Button
               variant="ghost"
@@ -405,22 +413,63 @@ function ScopePanel({
             </Button>
             {/* Only offered once this scope is approved and still unposted —
                 for a post shared on LinkedIn by hand, outside the app. */}
-            {approved && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-xs"
-                onClick={() => onMarkPosted(false)}
-                disabled={markingPosted}
-              >
-                {markingPosted ? (
-                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Send className="mr-1 h-3.5 w-3.5" />
-                )}
-                Mark as posted
-              </Button>
-            )}
+            {approved &&
+              (pickingDate ? (
+                <div className="space-y-2 rounded-lg border bg-gray-50 p-2">
+                  <Label
+                    htmlFor={`posted-on-${post.id}-${scope}`}
+                    className="text-xs text-gray-500"
+                  >
+                    Goes live on
+                  </Label>
+                  <Input
+                    id={`posted-on-${post.id}-${scope}`}
+                    type="date"
+                    value={postedOn}
+                    onChange={(e) => setPostedOn(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      className="h-7 flex-1 bg-blue-600 text-xs hover:bg-blue-700"
+                      onClick={() => {
+                        setPickingDate(false);
+                        onMarkPosted(false, postedOn);
+                      }}
+                      disabled={markingPosted || !postedOn}
+                    >
+                      Confirm
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setPickingDate(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={() => {
+                    setPostedOn(todayISO());
+                    setPickingDate(true);
+                  }}
+                  disabled={markingPosted}
+                >
+                  {markingPosted ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Send className="mr-1 h-3.5 w-3.5" />
+                  )}
+                  Mark as posted
+                </Button>
+              ))}
           </div>
         )}
       </div>
@@ -787,13 +836,18 @@ export function BatchReview({
 
   // Records a hand-posted scope, or reverses one. Keyed "<postId>:<scope>"
   // so one column's spinner doesn't spin the other's.
-  async function handleMarkPosted(postId: string, scope: Scope, undo: boolean) {
+  async function handleMarkPosted(
+    postId: string,
+    scope: Scope,
+    undo: boolean,
+    postedOn?: string
+  ) {
     setMarkingPostedKey(`${postId}:${scope}`);
     try {
       const res = await fetch(`/api/posts/${postId}/mark-posted`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope, undo }),
+        body: JSON.stringify({ scope, undo, postedOn }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -1314,7 +1368,9 @@ export function BatchReview({
                   onEdit={() => setEditing({ post, scope: "personal" })}
                   onRegenerate={() => handleRegenerate(post.id, "personal")}
                   onToggleApprove={() => handleToggleApprove(post.id, "personal")}
-                  onMarkPosted={(undo) => handleMarkPosted(post.id, "personal", undo)}
+                  onMarkPosted={(undo, postedOn) =>
+                    handleMarkPosted(post.id, "personal", undo, postedOn)
+                  }
                   markingPosted={markingPostedKey === `${post.id}:personal`}
                   onImageUpdated={handlePostImageUpdated}
                   onNotice={showNotice}
@@ -1328,7 +1384,9 @@ export function BatchReview({
                   onEdit={() => setEditing({ post, scope: "company" })}
                   onRegenerate={() => handleRegenerate(post.id, "company")}
                   onToggleApprove={() => handleToggleApprove(post.id, "company")}
-                  onMarkPosted={(undo) => handleMarkPosted(post.id, "company", undo)}
+                  onMarkPosted={(undo, postedOn) =>
+                    handleMarkPosted(post.id, "company", undo, postedOn)
+                  }
                   markingPosted={markingPostedKey === `${post.id}:company`}
                   onImageUpdated={handlePostImageUpdated}
                   onNotice={showNotice}

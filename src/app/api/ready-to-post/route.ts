@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isFutureDate } from "@/lib/post-status";
 import { createClient } from "@supabase/supabase-js";
 
 function getSupabase() {
@@ -30,7 +31,7 @@ export async function GET() {
 
     const { data: posts, error } = await supabase
       .from("posts")
-      .select("id, post_number, scheduled_date, time_slot, content_category, linkedin_personal_content, linkedin_personal_approved, linkedin_personal_published, linkedin_personal_image_url")
+      .select("id, post_number, scheduled_date, time_slot, content_category, linkedin_personal_content, linkedin_personal_approved, linkedin_personal_published, linkedin_personal_image_url, published_at")
       .eq("batch_id", batch.id)
       .eq("linkedin_personal_approved", true)
       .order("scheduled_date", { ascending: true })
@@ -41,7 +42,11 @@ export async function GET() {
     }
 
     const total = posts?.length || 0;
-    const posted = posts?.filter((p) => p.linkedin_personal_published).length || 0;
+    // Marked for a future date means queued in LinkedIn, not shared yet.
+    const posted =
+      posts?.filter(
+        (p) => p.linkedin_personal_published && !isFutureDate(p.published_at)
+      ).length || 0;
 
     return NextResponse.json({
       posts: posts || [],

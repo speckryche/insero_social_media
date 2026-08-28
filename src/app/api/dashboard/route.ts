@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isLivePublished } from "@/lib/post-status";
 import { createClient } from "@supabase/supabase-js";
 
 function getSupabase() {
@@ -33,13 +34,19 @@ export async function GET() {
     if (activeBatch) {
       const { data: posts } = await supabase
         .from("posts")
-        .select("id, post_number, scheduled_date, time_slot, status, error_log")
+        .select("id, post_number, scheduled_date, time_slot, status, error_log, published_at")
         .eq("batch_id", activeBatch.id)
         .order("scheduled_date", { ascending: true });
 
       if (posts) {
-        const published = posts.filter((p) => p.status === "published").length;
-        const scheduled = posts.filter((p) => p.status === "scheduled").length;
+        // A post marked for a future date is queued in LinkedIn, not live —
+        // it counts as scheduled until its day arrives, whatever status says.
+        const published = posts.filter(isLivePublished).length;
+        const scheduled = posts.filter(
+          (p) =>
+            (p.status === "scheduled" || p.status === "published") &&
+            !isLivePublished(p)
+        ).length;
         const failed = posts.filter((p) => p.status === "failed").length;
 
         batchProgress = {
@@ -98,16 +105,23 @@ export async function GET() {
     }
 
     // Stats
+    // These are head counts, so the "has its date arrived" rule has to be
+    // expressed in the query rather than derived in JS: anything dated after
+    // now is still queued and is excluded by the upper bound.
+    const nowIso = now.toISOString();
+
     const { count: publishedThisMonth } = await supabase
       .from("posts")
       .select("*", { count: "exact", head: true })
-      .eq("status", "published")
-      .gte("published_at", `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`);
+      .in("status", ["published", "scheduled"])
+      .gte("published_at", `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`)
+      .lte("published_at", nowIso);
 
     const { count: publishedAllTime } = await supabase
       .from("posts")
       .select("*", { count: "exact", head: true })
-      .eq("status", "published");
+      .in("status", ["published", "scheduled"])
+      .lte("published_at", nowIso);
 
     const { count: totalFailed } = await supabase
       .from("posts")

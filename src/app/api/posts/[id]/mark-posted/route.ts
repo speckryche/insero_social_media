@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { isFutureDate, isoDateToTimestamp } from "@/lib/post-status";
+import { isISODate } from "@/lib/notes";
 
 function getSupabase() {
   return createClient(
@@ -53,6 +55,18 @@ export async function POST(
     // undo: true reverses a mis-click.
     const undo = body.undo === true;
 
+    // The day it actually goes live on LinkedIn. A future date is normal —
+    // posts are queued in LinkedIn's own scheduler — so it is not validated
+    // against today.
+    if (body.postedOn !== undefined && !isISODate(body.postedOn)) {
+      return NextResponse.json(
+        {
+          error: `Invalid postedOn: ${JSON.stringify(body.postedOn)}. Expected YYYY-MM-DD.`,
+        },
+        { status: 400 }
+      );
+    }
+
     if (!isScope(scope)) {
       return NextResponse.json(
         { error: 'scope must be "company" or "personal"' },
@@ -81,25 +95,44 @@ export async function POST(
       // approved, and with no publish timestamp.
       if (!otherPublished) {
         update.published_at = null;
-        if (post.status === "published") update.status = "approved";
+        if (post.status === "published" || post.status === "scheduled") {
+          update.status = "approved";
+        }
       }
     } else {
-      // The first scope to go out stamps the time; a second one leaves it.
-      if (!post.published_at) {
-        update.published_at = new Date().toISOString();
-      }
+      // The chosen date wins outright, rather than only filling a blank: the
+      // second scope may go out later than the first, and the post is not live
+      // until the last one has.
+      const chosenAt = body.postedOn
+        ? isoDateToTimestamp(body.postedOn)
+        : new Date().toISOString();
 
-      // Only call the whole post published once every scope that actually has
-      // content has gone out. A company-only post is done on its own.
+      // Keep whichever date is later — the post goes live when its last scope
+      // does, so that is the date the whole post is measured against.
+      const existing = post.published_at ? new Date(post.published_at) : null;
+      const chosen = new Date(chosenAt);
+      update.published_at =
+        existing && existing.getTime() > chosen.getTime()
+          ? post.published_at
+          : chosenAt;
+
+      // Only call the whole post done once every scope that actually has
+      // content has been marked. A company-only post is done on its own.
       const populated = (["company", "personal"] as Scope[]).filter((s) =>
         hasContent(post, s)
       );
-      const allPublished =
+      const allMarked =
         populated.length > 0 &&
         populated.every((s) =>
           s === scope ? true : post[PUBLISHED_COLUMN[s]] === true
         );
-      if (allPublished) update.status = "published";
+
+      // Still ahead of us means queued in LinkedIn, not live: "scheduled".
+      if (allMarked) {
+        update.status = isFutureDate(update.published_at)
+          ? "scheduled"
+          : "published";
+      }
     }
 
     const { data: updated, error } = await supabase

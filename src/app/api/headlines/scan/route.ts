@@ -10,7 +10,6 @@ import {
   type HeadlineFeed,
   type HeadlineItem,
 } from "@/lib/headlines";
-import { nextMonday, isMonday, isISODate, dayName, parseISODate } from "@/lib/week";
 
 // How many headlines each feed is asked for, and the hard ceiling applied to
 // whatever the model actually returns.
@@ -162,38 +161,8 @@ Return ONLY the JSON array. No markdown fences, no explanation, no extra text.`,
 }
 
 // POST — scan all three feeds and store the result as a headline_scans row.
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const body = await request.json().catch(() => ({}));
-
-    // Scans are keyed by the week they were run for, same as batches. No
-    // weekStart means the coming week, matching the generate route's default.
-    const weekStart: string =
-      body.weekStart === undefined ||
-      body.weekStart === null ||
-      body.weekStart === ""
-        ? nextMonday()
-        : String(body.weekStart);
-
-    if (!isISODate(weekStart)) {
-      return NextResponse.json(
-        { error: `Invalid weekStart: ${JSON.stringify(body.weekStart)}. Expected a calendar date as YYYY-MM-DD.` },
-        { status: 400 }
-      );
-    }
-    if (!isMonday(weekStart)) {
-      return NextResponse.json(
-        { error: `weekStart must be a Monday. ${weekStart} is a ${dayName(weekStart)}.` },
-        { status: 400 }
-      );
-    }
-
-    // month/year are still written so the pre-week scans keep reading and the
-    // NOT NULL columns stay satisfied — see migration 024.
-    const weekMonday = parseISODate(weekStart);
-    const month = weekMonday.getMonth() + 1;
-    const year = weekMonday.getFullYear();
-
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
     // One call per feed, in parallel. A feed that throws yields no items
@@ -229,7 +198,10 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabase();
     const { data: scan, error } = await supabase
       .from("headline_scans")
-      .insert({ week_start_date: weekStart, month, year, items, picked: [] })
+      // Scans are identified on their own now — no period key. The
+      // week_start_date / month / year columns stay in the table for the old
+      // rows but are no longer written.
+      .insert({ items, picked: [] })
       .select()
       .single();
 
@@ -237,7 +209,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ scanId: scan.id, weekStart, items });
+    return NextResponse.json({ scanId: scan.id, items });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },

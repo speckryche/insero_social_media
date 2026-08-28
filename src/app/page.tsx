@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { GenerateBatchModal } from "@/components/generate-batch-modal";
 import Link from "next/link";
-import { batchPeriodLabel } from "@/lib/batch-period";
+import { batchLabel } from "@/lib/batch-period";
 
 const STATUS_DOT: Record<string, string> = {
   scheduled: "bg-blue-400",
@@ -105,7 +105,7 @@ export default function DashboardPage() {
                   href={`/batches/${batch.id}`}
                   className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors"
                 >
-                  {batchPeriodLabel(batch)}
+                  {batchLabel(batch)}
                 </Link>
                 <span className="text-sm text-gray-500">
                   {progress?.published || 0}/{progress?.total || 0} published
@@ -192,14 +192,24 @@ export default function DashboardPage() {
           <CardContent>
             {nextPost ? (
               <>
+                {/* Posts in a numbered batch carry no date; legacy scheduled
+                    ones still do. */}
                 <p className="text-2xl font-bold">
-                  {new Date(nextPost.scheduled_date + "T00:00:00").toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
+                  {nextPost.scheduled_date
+                    ? new Date(
+                        nextPost.scheduled_date + "T00:00:00"
+                      ).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : `#${nextPost.post_number}`}
                 </p>
                 <p className="text-xs text-gray-400 mt-1 capitalize">
-                  #{nextPost.post_number} &middot; {nextPost.time_slot}
+                  {nextPost.scheduled_date
+                    ? `#${nextPost.post_number}${
+                        nextPost.time_slot ? ` · ${nextPost.time_slot}` : ""
+                      }`
+                    : "Not scheduled"}
                 </p>
               </>
             ) : (

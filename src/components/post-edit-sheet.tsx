@@ -49,7 +49,6 @@ export function PostEditSheet({
   const [facebook, setFacebook] = useState(post.facebook_content || "");
   const [google, setGoogle] = useState(post.google_content || "");
   const [category, setCategory] = useState(post.content_category);
-  const [timeSlot, setTimeSlot] = useState(post.time_slot);
   // Image presence now comes from the scope image URL columns, not has_image.
   // The template fields below stay editable whenever a template is set.
   const [saving, setSaving] = useState(false);
@@ -75,7 +74,6 @@ export function PostEditSheet({
                 google_content: google,
               }),
           content_category: category,
-          time_slot: timeSlot,
           status: "edited",
         }),
       });
@@ -102,7 +100,7 @@ export function PostEditSheet({
         <ScrollArea className="h-[calc(100vh-140px)]">
           <div className="px-6 py-4 space-y-5">
             {/* Meta fields */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
                 <Label>Category</Label>
                 <Select value={category} onValueChange={setCategory}>
@@ -119,30 +117,8 @@ export function PostEditSheet({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Time Slot</Label>
-                <Select value={timeSlot} onValueChange={setTimeSlot}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="morning">Morning</SelectItem>
-                    <SelectItem value="afternoon">Afternoon</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
-            {/* Scheduled date (read-only display) */}
-            <div className="space-y-2">
-              <Label className="text-gray-500">Scheduled Date</Label>
-              <p className="text-sm text-gray-700">
-                {new Date(post.scheduled_date + "T00:00:00").toLocaleDateString(
-                  "en-US",
-                  { weekday: "long", month: "long", day: "numeric", year: "numeric" }
-                )}
-              </p>
-            </div>
 
             {/* The uploaded company image, read-only. Images are attached
                 from the drop zones on the batch page. */}

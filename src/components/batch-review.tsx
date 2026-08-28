@@ -65,8 +65,7 @@ import {
   BATCH_SCOPE_STYLES,
   batchScopeKey,
 } from "@/lib/batch-scope";
-import { batchPeriodLabel } from "@/lib/batch-period";
-import { parseISODate, toISODate, weekdaysOf } from "@/lib/week";
+import { batchLabel, legacyPeriodLabel } from "@/lib/batch-period";
 import {
   DEFAULT_ENABLED_PLATFORMS,
   OPTIONAL_PLATFORMS,
@@ -126,14 +125,6 @@ interface BatchReviewProps {
   enabledPlatforms?: Platform[];
 }
 
-function getWeekNumber(dateStr: string): number {
-  const date = new Date(dateStr + "T00:00:00");
-  const dayOfMonth = date.getDate();
-  if (dayOfMonth <= 7) return 1;
-  if (dayOfMonth <= 14) return 2;
-  if (dayOfMonth <= 21) return 3;
-  return 4;
-}
 
 type Scope = "company" | "personal";
 
@@ -164,18 +155,9 @@ function isFullyApproved(post: Post): boolean {
 // ---- TXT export -----------------------------------------------------------
 
 const EXPORT_DIVIDER = "=".repeat(60);
-const SLOT_ORDER: Record<string, number> = { morning: 0, afternoon: 1 };
-
-// Schedule order, so the file reads the way the week runs rather than the way
-// the rows happen to come back.
+// Posts have no date or slot any more — the batch's own numbering is the
+// order.
 function compareForExport(a: Post, b: Post): number {
-  const byDate = String(a.scheduled_date || "").localeCompare(
-    String(b.scheduled_date || "")
-  );
-  if (byDate !== 0) return byDate;
-  const bySlot =
-    (SLOT_ORDER[String(a.time_slot)] ?? 9) - (SLOT_ORDER[String(b.time_slot)] ?? 9);
-  if (bySlot !== 0) return bySlot;
   return (a.post_number ?? 0) - (b.post_number ?? 0);
 }
 
@@ -184,47 +166,14 @@ function exportCategory(category: string): string {
   return String(category || "uncategorized").replace(/_/g, " ").toUpperCase();
 }
 
-// "Monday, Aug 31 · Morning"
-function exportDateLine(post: Post): string {
-  const parts: string[] = [];
-  if (post.scheduled_date) {
-    parts.push(
-      new Date(String(post.scheduled_date) + "T00:00:00").toLocaleDateString(
-        "en-US",
-        { weekday: "long", month: "short", day: "numeric" }
-      )
-    );
-  }
-  if (post.time_slot) {
-    const slot = String(post.time_slot);
-    parts.push(slot.charAt(0).toUpperCase() + slot.slice(1));
-  }
-  return parts.join(" · ");
-}
-
-// "Week of Mon Aug 31 – Fri Sep 4, 2026". Legacy monthly batches have no week,
-// so they fall back to the label the rest of the app shows them under.
-function exportPeriodLine(batch: Batch): string {
-  if (!batch.week_start_date) return batchPeriodLabel(batch);
-  const days = weekdaysOf(String(batch.week_start_date));
-  const short = (d: Date) =>
-    d
-      .toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      })
-      // en-US puts a comma after the weekday; the header reads better without.
-      .replace(",", "");
-  const monday = parseISODate(days[0]);
-  const friday = parseISODate(days[4]);
-  return `Week of ${short(monday)} – ${short(friday)}, ${friday.getFullYear()}`;
-}
-
 function buildExportText(batch: Batch, posts: Post[], scope: Scope): string {
+  const legacy = legacyPeriodLabel(batch);
   const lines: string[] = [
     `INSERO — ${scope === "company" ? "COMPANY" : "PERSONAL"} POSTS`,
-    exportPeriodLine(batch),
+    batchLabel(batch),
+    // Legacy batches keep their old period so an exported file from one is
+    // still identifiable.
+    ...(legacy ? [legacy] : []),
     `${posts.length} approved post${posts.length === 1 ? "" : "s"}`,
     "",
   ];
@@ -235,7 +184,6 @@ function buildExportText(batch: Batch, posts: Post[], scope: Scope): string {
     lines.push(
       EXPORT_DIVIDER,
       `POST ${i + 1} — ${exportCategory(post.content_category)}`,
-      exportDateLine(post),
       EXPORT_DIVIDER,
       "",
       scopeContent(post, scope),
@@ -491,7 +439,6 @@ export function BatchReview({
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [weekFilter, setWeekFilter] = useState("all");
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ post: Post; scope: Scope } | null>(
     null
@@ -548,13 +495,9 @@ export function BatchReview({
       if (categoryFilter !== "all" && post.content_category !== categoryFilter)
         return false;
       if (statusFilter !== "all" && post.status !== statusFilter) return false;
-      if (weekFilter !== "all") {
-        const week = getWeekNumber(post.scheduled_date);
-        if (String(week) !== weekFilter) return false;
-      }
       return true;
     });
-  }, [posts, categoryFilter, statusFilter, weekFilter]);
+  }, [posts, categoryFilter, statusFilter]);
 
   async function handleApproveAll() {
     setLoadingAction("approve-all");
@@ -719,16 +662,15 @@ export function BatchReview({
       return;
     }
 
-    const stamp = batch.week_start_date
-      ? String(batch.week_start_date)
-      : toISODate(new Date());
+    const stamp =
+      typeof batch.batch_number === "number" ? String(batch.batch_number) : "legacy";
     const blob = new Blob([buildExportText(batch, approved, scope)], {
       type: "text/plain;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `insero-${scope}-${stamp}.txt`;
+    anchor.download = `insero-${scope}-batch-${stamp}.txt`;
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
@@ -862,7 +804,7 @@ export function BatchReview({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <h2 className="whitespace-nowrap text-xl font-semibold text-gray-900">
-                {batchPeriodLabel(batch)}
+                {batchLabel(batch)}
               </h2>
               <Badge
                 className={BATCH_STATUS_STYLES[batch.status] || ""}
@@ -1220,19 +1162,6 @@ export function BatchReview({
           </SelectContent>
         </Select>
 
-        <Select value={weekFilter} onValueChange={setWeekFilter}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Week" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Weeks</SelectItem>
-            <SelectItem value="1">Week 1</SelectItem>
-            <SelectItem value="2">Week 2</SelectItem>
-            <SelectItem value="3">Week 3</SelectItem>
-            <SelectItem value="4">Week 4+</SelectItem>
-          </SelectContent>
-        </Select>
-
         <span className="flex items-center text-sm text-gray-500 ml-auto">
           {filteredPosts.length} post{filteredPosts.length !== 1 ? "s" : ""}
         </span>
@@ -1248,15 +1177,6 @@ export function BatchReview({
                   <span className="text-sm font-semibold text-gray-900">
                     #{post.post_number}
                   </span>
-                  <span className="text-sm text-gray-500">
-                    {new Date(post.scheduled_date + "T00:00:00").toLocaleDateString(
-                      "en-US",
-                      { weekday: "short", month: "short", day: "numeric" }
-                    )}
-                  </span>
-                  <Badge variant="outline" className="text-xs capitalize">
-                    {post.time_slot}
-                  </Badge>
                   <Badge
                     className={`text-xs ${CATEGORY_STYLES[post.content_category] || ""}`}
                   >
@@ -1556,9 +1476,6 @@ export function BatchReview({
         <AddPostsDialog
           batchId={batch.id}
           scope={batch.scope}
-          // Null on the legacy monthly batches, which schedule across a whole
-          // month and have no per-week slot budget to show.
-          weekStart={batch.week_start_date ?? null}
           onClose={() => setAddingPosts(false)}
           // Pull the batch and its posts fresh so the new rows appear in the
           // list, in schedule order, without a manual reload.

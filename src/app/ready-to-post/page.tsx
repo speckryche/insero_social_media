@@ -11,7 +11,7 @@ import {
   Loader2,
   ClipboardCheck,
 } from "lucide-react";
-import { batchPeriodLabel, type BatchPeriod } from "@/lib/batch-period";
+import { batchLabel, type BatchPeriod } from "@/lib/batch-period";
 
 const CATEGORY_LABELS: Record<string, string> = {
   ai_speak: "AI Speak",
@@ -127,7 +127,7 @@ export default function ReadyToPostPage() {
         </div>
         <Badge variant="outline" className="text-sm px-3 py-1">
           {stats.posted} of {stats.total} shared
-          {batchPeriod ? ` · ${batchPeriodLabel(batchPeriod)}` : ""}
+          {batchPeriod ? ` · ${batchLabel(batchPeriod)}` : ""}
         </Badge>
       </div>
 
@@ -166,15 +166,22 @@ export default function ReadyToPostPage() {
                     <span className="text-sm font-semibold text-gray-900">
                       #{post.post_number}
                     </span>
-                    <span className="text-sm text-gray-500">
-                      {new Date(post.scheduled_date + "T00:00:00").toLocaleDateString(
-                        "en-US",
-                        { weekday: "short", month: "short", day: "numeric" }
-                      )}
-                    </span>
-                    <Badge variant="outline" className="text-xs capitalize">
-                      {post.time_slot}
-                    </Badge>
+                    {post.scheduled_date && (
+                      <span className="text-sm text-gray-500">
+                        {new Date(
+                          post.scheduled_date + "T00:00:00"
+                        ).toLocaleDateString("en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    )}
+                    {post.time_slot && (
+                      <Badge variant="outline" className="text-xs capitalize">
+                        {post.time_slot}
+                      </Badge>
+                    )}
                     <Badge className={`text-xs ${CATEGORY_STYLES[post.content_category] || ""}`}>
                       {CATEGORY_LABELS[post.content_category] || post.content_category}
                     </Badge>

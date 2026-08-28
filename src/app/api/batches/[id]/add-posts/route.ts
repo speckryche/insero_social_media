@@ -10,12 +10,7 @@ import {
 import {
   getSupabase,
   categoriesForScope,
-  buildAllSlots,
-  buildWeekSlots,
-  loadTakenSlotsForWeek,
-  selectEvenly,
-  slotKey,
-  SLOTS_PER_WEEK,
+  defaultPostTimes,
   generateCategoryPosts,
   type BatchScope,
   type GeneratedPost,
@@ -48,7 +43,7 @@ export async function POST(
 
     const { data: batch, error: batchError } = await supabase
       .from("batches")
-      .select("id, month, year, week_start_date, scope, total_posts")
+      .select("id, batch_number, scope, total_posts")
       .eq("id", params.id)
       .single();
 
@@ -60,10 +55,6 @@ export async function POST(
     }
 
     // A weekly batch schedules into its own Mon-Fri week. A legacy monthly
-    // batch has no week_start_date and keeps using the whole month.
-    const weekStart = batch.week_start_date
-      ? String(batch.week_start_date)
-      : null;
 
     // The category has to be one this batch's scope actually covers.
     const scope = (batch.scope as BatchScope) || "both";
@@ -96,10 +87,9 @@ export async function POST(
     // every picked headline. Legacy monthly batches keep the old lookup.
     let pickedHeadlines: HeadlineItem[] = [];
     if (useHeadlines) {
-      const scanQuery = supabase.from("headline_scans").select("picked");
-      const { data: scans } = await (weekStart
-        ? scanQuery.eq("week_start_date", weekStart)
-        : scanQuery.eq("month", batch.month).eq("year", batch.year))
+      const { data: scans } = await supabase
+        .from("headline_scans")
+        .select("picked")
         .order("created_at", { ascending: false })
         .limit(1);
 
@@ -132,7 +122,7 @@ export async function POST(
     );
 
     // The model can return more or fewer than asked; take what was requested.
-    let posts = generated.slice(0, count);
+    const posts = generated.slice(0, count);
     if (posts.length === 0) {
       return NextResponse.json(
         { error: "The model returned no posts. Try again." },
@@ -140,66 +130,10 @@ export async function POST(
       );
     }
 
-    // --- scheduling --------------------------------------------------------
     const { data: existingPosts } = await supabase
       .from("posts")
-      .select("post_number, scheduled_date, time_slot, content_category")
+      .select("post_number")
       .eq("batch_id", params.id);
-
-    // Legacy monthly batches keep using the whole month, weekends and all —
-    // the monthly drafts already in the database have to go on working
-    // exactly as they did.
-    const allSlots = weekStart
-      ? buildWeekSlots(weekStart, settings)
-      : buildAllSlots(Number(batch.month), Number(batch.year), settings);
-
-    // Contention differs by era. A week is shared with every other batch in
-    // it, so read what is taken through the same helper the generate route
-    // uses — that is what stops the two paths disagreeing. A legacy monthly
-    // batch only ever competed with itself.
-    const taken = weekStart
-      ? await loadTakenSlotsForWeek(
-          supabase,
-          weekStart,
-          (batch.scope as BatchScope) ?? "both"
-        )
-      : new Set(
-          (existingPosts || []).map((p) =>
-            slotKey({
-              scheduled_date: String(p.scheduled_date),
-              time_slot: String(p.time_slot),
-            })
-          )
-        );
-
-    const freeSlots = allSlots.filter((slot) => !taken.has(slotKey(slot)));
-    const chosenSlots = selectEvenly(freeSlots, posts.length);
-
-    if (chosenSlots.length < posts.length) {
-      if (weekStart) {
-        // The week caps out at SLOTS_PER_WEEK. Shorten the add rather than
-        // double-book a slot — the same rule the generate route follows.
-        if (chosenSlots.length === 0) {
-          return NextResponse.json(
-            {
-              error: `No free slots left in the week of ${weekStart}. A week holds ${SLOTS_PER_WEEK} posts and all of them are taken.`,
-            },
-            { status: 409 }
-          );
-        }
-        console.log(
-          `[add-posts] week ${weekStart} has ${chosenSlots.length} free slot(s) — adding ${chosenSlots.length} of ${posts.length}`
-        );
-        posts = posts.slice(0, chosenSlots.length);
-      } else {
-        // Legacy months double up only when the month is genuinely full.
-        const shortfall = posts.length - chosenSlots.length;
-        console.log(
-          `[add-posts] month is full — reusing ${shortfall} existing slot(s)`
-        );
-        chosenSlots.push(...selectEvenly(allSlots, shortfall));
-      }
-    }
 
     const startNumber =
       Math.max(0, ...(existingPosts || []).map((p) => Number(p.post_number) || 0)) + 1;
@@ -213,9 +147,9 @@ export async function POST(
       ...posts.filter((post) => !usesHeadline(post)),
     ];
 
-    const rows = ordered.map((post, i) => {
-      const slot = chosenSlots[i];
+    const postTimes = defaultPostTimes(settings);
 
+    const rows = ordered.map((post, i) => {
       const index = post.headline_index;
       const headlineItem =
         typeof index === "number" &&
@@ -227,10 +161,11 @@ export async function POST(
       return {
         batch_id: params.id,
         post_number: startNumber + i,
-        scheduled_date: slot.scheduled_date,
-        scheduled_time_1: slot.scheduled_time_1,
-        scheduled_time_2: slot.scheduled_time_2,
-        time_slot: slot.time_slot,
+        // No date and no slot — scheduling is retired. The two time columns
+        // are still NOT NULL in the database, so they take the defaults.
+        scheduled_date: null,
+        time_slot: null,
+        ...postTimes,
         content_category: category,
         linkedin_content: post.linkedin_content,
         original_linkedin_content: post.linkedin_content,

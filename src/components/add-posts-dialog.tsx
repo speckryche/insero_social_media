@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Plus, CheckCircle2 } from "lucide-react";
-import { SLOTS_PER_WEEK, formatWeekRange } from "@/lib/week";
 
 // Categories by batch scope. A NULL scope predates the column and covered
 // everything, same as "both".
@@ -46,7 +45,6 @@ interface AddPostsDialogProps {
   batchId: string;
   scope: string | null | undefined;
   /** The batch's Monday, or null for a legacy monthly batch. */
-  weekStart?: string | null;
   onClose: () => void;
   onAdded: () => void;
 }
@@ -54,7 +52,6 @@ interface AddPostsDialogProps {
 export function AddPostsDialog({
   batchId,
   scope,
-  weekStart = null,
   onClose,
   onAdded,
 }: AddPostsDialogProps) {
@@ -71,31 +68,12 @@ export function AddPostsDialog({
   // lane, so what is actually addable is whatever that lane has left. Read it
   // from the generate route — the same source the Generate dialog uses and the
   // same logic the add-posts route enforces — rather than counting here.
-  const [slotsFree, setSlotsFree] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!weekStart) return;
-    let cancelled = false;
-
-    fetch(
-      `/api/generate-batch?weekStart=${encodeURIComponent(weekStart)}&scope=${scope || "both"}`
-    )
-      .then(async (res) => {
-        const data = await res.json();
-        if (!cancelled && res.ok) setSlotsFree(data.slotsFree);
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [weekStart, scope]);
 
   // Never offer more than the week can take. Legacy monthly batches keep the
   // full range, since a month has slots to spare.
-  const maxAddable = weekStart && slotsFree !== null ? slotsFree : COUNTS.length;
+  const maxAddable = COUNTS.length;
   const countOptions = COUNTS.filter((n) => n <= Math.max(maxAddable, 1));
-  const noSlots = weekStart !== null && slotsFree === 0;
 
   async function handleAdd() {
     setLoading(true);
@@ -132,9 +110,7 @@ export function AddPostsDialog({
           <DialogDescription>
             {added !== null
               ? "Added to this batch."
-              : weekStart
-              ? `Generates more posts into this batch, scheduled into unused slots in ${formatWeekRange(weekStart)}.`
-              : "Generates more posts into this batch, scheduled into unused slots in the month."}
+              : "Generates more posts into this batch, numbered after the ones already in it."}
           </DialogDescription>
         </DialogHeader>
 
@@ -186,13 +162,6 @@ export function AddPostsDialog({
                   ))}
                 </SelectContent>
               </Select>
-              {weekStart && (
-                <p className="text-xs text-gray-400">
-                  {slotsFree === null
-                    ? "Checking slots…"
-                    : `${slotsFree} of ${SLOTS_PER_WEEK} slots free this week.`}
-                </p>
-              )}
             </div>
 
             <div className="flex items-start space-x-2">
@@ -233,7 +202,7 @@ export function AddPostsDialog({
               </Button>
               <Button
                 onClick={handleAdd}
-                disabled={loading || noSlots}
+                disabled={loading}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 {loading ? (
@@ -241,7 +210,7 @@ export function AddPostsDialog({
                 ) : (
                   <Plus className="h-4 w-4 mr-1.5" />
                 )}
-                {noSlots ? "Week is full" : `Add ${count}`}
+                {`Add ${count}`}
               </Button>
             </>
           )}

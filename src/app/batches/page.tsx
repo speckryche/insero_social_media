@@ -10,7 +10,8 @@ import {
   batchScopeKey,
 } from "@/lib/batch-scope";
 import {
-  batchPeriodLabel,
+  batchLabel,
+  legacyPeriodLabel,
   batchPeriodBadge,
   compareBatchesByPeriodDesc,
 } from "@/lib/batch-period";
@@ -93,12 +94,19 @@ export default async function BatchesPage() {
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">
-                          {batchPeriodLabel(batch)}
+                          {batchLabel(batch)}
                         </p>
                         <p className="text-sm text-gray-500">
                           {approved}/{batch.total_posts} approved &middot;{" "}
                           Created {new Date(batch.created_at).toLocaleDateString()}
                         </p>
+                        {/* Legacy week/month batches keep their old period as
+                            a secondary line so history stays readable. */}
+                        {legacyPeriodLabel(batch) && (
+                          <p className="text-xs text-gray-400">
+                            {legacyPeriodLabel(batch)}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

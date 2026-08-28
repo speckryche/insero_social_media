@@ -1,15 +1,10 @@
-// Presentation for a batch's period, shared by the Batches list, the batch
-// header, the dashboard and Ready to Post so they can't drift apart — the same
-// reason batch-scope.ts exists.
+// How a batch is identified in the UI.
 //
-// Batches are Mon-Fri weeks now, identified by week_start_date. The monthly
-// batches generated before that move have month/year and no week, and they are
-// still live in the database, so every label here falls back rather than
-// rendering blank.
+// Batches are a plain numbered list: "Batch 12". The week and month batches
+// generated before that move still exist, so every helper here falls back to
+// their old period rather than rendering blank — history stays readable.
 //
-// Client-safe: this imports only from week.ts, which has no Node-only imports.
-
-import { formatWeekRange, parseISODate } from "@/lib/week";
+// Client-safe: no imports, no Node-only anything.
 
 const MONTHS_LONG = [
   "January", "February", "March", "April", "May", "June",
@@ -21,72 +16,93 @@ const MONTHS_SHORT = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-// Just the period columns, so this works against any batch row shape.
+// Just the identity columns, so this works against any batch row shape.
 export interface BatchPeriod {
+  batch_number?: number | null;
   week_start_date?: string | null;
   month?: number | null;
   year?: number | null;
 }
 
-export function isWeeklyBatch(batch: BatchPeriod): boolean {
-  return !!batch.week_start_date;
+/** "Batch 12". Legacy rows with no number fall back to their old period. */
+export function batchLabel(batch: BatchPeriod): string {
+  if (typeof batch.batch_number === "number") {
+    return `Batch ${batch.batch_number}`;
+  }
+  return legacyPeriodLabel(batch) ?? "Untitled batch";
 }
 
-/** "Mon 31 Aug – Fri 4 Sep", or "September 2026" for a legacy monthly batch. */
-export function batchPeriodLabel(batch: BatchPeriod): string {
+/**
+ * The old week or month a legacy batch was generated for, or null for a
+ * numbered batch. Rendered as a secondary line so old batches stay findable.
+ */
+export function legacyPeriodLabel(batch: BatchPeriod): string | null {
   if (batch.week_start_date) {
-    return formatWeekRange(String(batch.week_start_date));
+    const monday = parseISO(String(batch.week_start_date));
+    const friday = new Date(monday);
+    friday.setDate(friday.getDate() + 4);
+    return (
+      `Week of ${MONTHS_SHORT[monday.getMonth()]} ${monday.getDate()} – ` +
+      `${MONTHS_SHORT[friday.getMonth()]} ${friday.getDate()}`
+    );
   }
   if (batch.month && batch.year) {
     return `${MONTHS_LONG[batch.month - 1] ?? ""} ${batch.year}`.trim();
   }
-  return "Undated batch";
+  return null;
 }
 
-/**
- * The two lines of the Batches list date badge. A weekly batch shows the
- * Monday it starts on (AUG / 31); a legacy monthly batch keeps its old month
- * and year (SEP / 2026).
- */
+/** The two lines of the Batches list badge: BATCH / 12. */
 export function batchPeriodBadge(batch: BatchPeriod): {
   top: string;
   bottom: string;
 } {
+  if (typeof batch.batch_number === "number") {
+    return { top: "BATCH", bottom: String(batch.batch_number) };
+  }
   if (batch.week_start_date) {
-    const monday = parseISODate(String(batch.week_start_date));
+    const monday = parseISO(String(batch.week_start_date));
     return {
       top: MONTHS_SHORT[monday.getMonth()] ?? "",
       bottom: String(monday.getDate()),
     };
   }
   if (batch.month && batch.year) {
-    return {
-      top: MONTHS_SHORT[batch.month - 1] ?? "",
-      bottom: String(batch.year),
-    };
+    return { top: MONTHS_SHORT[batch.month - 1] ?? "", bottom: String(batch.year) };
   }
   return { top: "—", bottom: "" };
 }
 
 /**
- * Newest period first, with the legacy monthly batches after every weekly one.
- * Array.prototype.sort is stable, so rows that tie here keep whatever order
- * the query returned them in — created_at descending.
+ * Highest batch number first, with the legacy week/month batches after every
+ * numbered one. Array.prototype.sort is stable, so ties keep whatever order
+ * the query returned — created_at descending.
  */
 export function compareBatchesByPeriodDesc(
   a: BatchPeriod,
   b: BatchPeriod
 ): number {
+  const aNum = typeof a.batch_number === "number" ? a.batch_number : null;
+  const bNum = typeof b.batch_number === "number" ? b.batch_number : null;
+
+  if (aNum !== null && bNum !== null) return bNum - aNum;
+  if (aNum !== null) return -1;
+  if (bNum !== null) return 1;
+
+  // Both legacy: newest week, then newest month.
   const aWeek = a.week_start_date ? String(a.week_start_date) : null;
   const bWeek = b.week_start_date ? String(b.week_start_date) : null;
-
   if (aWeek && bWeek) return bWeek.localeCompare(aWeek);
   if (aWeek) return -1;
   if (bWeek) return 1;
 
-  // Both legacy: newest month first.
   return (
-    ((b.year ?? 0) * 12 + (b.month ?? 0)) -
-    ((a.year ?? 0) * 12 + (a.month ?? 0))
+    ((b.year ?? 0) * 12 + (b.month ?? 0)) - ((a.year ?? 0) * 12 + (a.month ?? 0))
   );
+}
+
+// Local so this file owns its only date need and week.ts could be deleted.
+function parseISO(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
 }

@@ -69,7 +69,18 @@ export async function GET(request: NextRequest) {
       ? settings.weekend_afternoon_time
       : settings.weekday_afternoon_time;
 
-    // 3. Find posts scheduled for today
+    // 3. Find posts scheduled for today.
+    //
+    // SCHEDULED PUBLISHING IS RETIRED, pending a new scheduling scheme.
+    // Batches are a numbered list now and generation writes scheduled_date
+    // as null, so this lookup matches nothing for any new batch — the cron
+    // runs and reports "No posts due right now". Publishing happens by hand
+    // via Publish Now on the batch page, which does not consult this column.
+    //
+    // The query is left exactly as it was so it starts working again the
+    // moment something populates scheduled_date. Note the LinkedIn publisher
+    // is separately broken on a retired API version (426), so this cron could
+    // not have published today regardless of the week change.
     const { data: duePosts } = await supabase
       .from("posts")
       .select("*")

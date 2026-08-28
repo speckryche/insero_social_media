@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -27,18 +27,8 @@ import {
   FEED_LABELS,
   type HeadlineItem,
 } from "@/lib/headlines";
-import {
-  SLOTS_PER_WEEK,
-  POST_COUNT_PRESETS,
-  DEFAULT_POST_COUNT,
-  nextMonday,
-  formatWeekRange,
-  parseISODate,
-  toISODate,
-} from "@/lib/week";
+import { POST_COUNT_PRESETS, DEFAULT_POST_COUNT } from "@/lib/post-count";
 
-// How many weeks ahead the picker offers, starting at next Monday.
-const WEEKS_AHEAD = 6;
 
 // What each size means in practice, since "5 posts" alone doesn't say how
 // they land across the week.
@@ -67,13 +57,11 @@ const SCOPE_OPTIONS: Array<{ value: BatchScope; label: string; hint: string }> =
   { value: "personal", label: "Personal only", hint: "Personal Take posts only" },
 ];
 
-// Test mode ignores the size picker: 2 per included category, capped at what
-// a week can hold. "Both" wants 12 (six categories) but a week only has
-// SLOTS_PER_WEEK slots, so it lands on 10.
+// Test mode ignores the size picker: 2 per included category.
 const SCOPE_TEST_COUNTS: Record<BatchScope, number> = {
-  both: Math.min(12, SLOTS_PER_WEEK),
-  company: Math.min(10, SLOTS_PER_WEEK),
-  personal: Math.min(2, SLOTS_PER_WEEK),
+  both: 12,
+  company: 10,
+  personal: 2,
 };
 
 export function GenerateBatchModal() {
@@ -81,17 +69,7 @@ export function GenerateBatchModal() {
 
   // Batches are generated on a weekend for the week ahead, so next Monday is
   // the common case and needs no clicks.
-  const weekOptions = useMemo(() => {
-    const first = parseISODate(nextMonday());
-    return Array.from({ length: WEEKS_AHEAD }, (_, i) =>
-      toISODate(
-        new Date(first.getFullYear(), first.getMonth(), first.getDate() + i * 7)
-      )
-    );
-  }, []);
-
   const [open, setOpen] = useState(false);
-  const [weekStart, setWeekStart] = useState(() => nextMonday());
   const [testMode, setTestMode] = useState(false);
   const [scope, setScope] = useState<BatchScope>("both");
   const [postCount, setPostCount] = useState(String(DEFAULT_POST_COUNT));
@@ -106,35 +84,6 @@ export function GenerateBatchModal() {
   // Nothing is used unless it is ticked — headlines are opt-in per item.
   const [pickedIds, setPickedIds] = useState<string[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
-  // Free slots for the chosen week and scope. Read from the generate route so
-  // this number and the one the POST enforces can never drift apart.
-  const [slotsFree, setSlotsFree] = useState<number | null>(null);
-  const [slotsError, setSlotsError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setSlotsFree(null);
-    setSlotsError(null);
-
-    fetch(
-      `/api/generate-batch?weekStart=${encodeURIComponent(weekStart)}&scope=${scope}`
-    )
-      .then(async (res) => {
-        const data = await res.json();
-        if (cancelled) return;
-        if (!res.ok) throw new Error(data.error || "Could not read slots");
-        setSlotsFree(data.slotsFree);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setSlotsError(err instanceof Error ? err.message : "Could not read slots");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, weekStart, scope]);
 
   async function handleScanHeadlines() {
     setScanning(true);
@@ -143,7 +92,7 @@ export function GenerateBatchModal() {
       const res = await fetch("/api/headlines/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weekStart }),
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Scan failed");
@@ -189,7 +138,6 @@ export function GenerateBatchModal() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          weekStart,
           testMode,
           scope,
           postCount: parseInt(postCount),
@@ -221,11 +169,6 @@ export function GenerateBatchModal() {
   const effectiveCount = testMode ? SCOPE_TEST_COUNTS[scope] : chosenSize;
   const scopeLabel = SCOPE_OPTIONS.find((o) => o.value === scope)!.label;
 
-  // The route shortens a batch to what the week has free, so say the real
-  // number here rather than promising posts that won't be generated.
-  const willGenerate =
-    slotsFree === null ? effectiveCount : Math.min(effectiveCount, slotsFree);
-  const noSlots = slotsFree === 0;
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!loading || error) { setOpen(v); setLoading(false); setError(null); } }}>
@@ -266,45 +209,11 @@ export function GenerateBatchModal() {
               <DialogDescription>
                 {testMode
                   ? `Generate ${effectiveCount} test posts (2 per category, ${scopeLabel.toLowerCase()}) to review content quality and image templates before committing to a full batch.`
-                  : `Generate ${willGenerate} AI-written posts (${scopeLabel.toLowerCase()}) for ${formatWeekRange(weekStart)}, spread evenly Monday to Friday. You can review and edit them before approving.`}
+                  : `Generate ${effectiveCount} AI-written posts (${scopeLabel.toLowerCase()}) as a new numbered batch. You can review and edit them before approving.`}
               </DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="weekStart">Week</Label>
-                  <Select value={weekStart} onValueChange={setWeekStart}>
-                    <SelectTrigger id="weekStart">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {weekOptions.map((monday, i) => (
-                        <SelectItem key={monday} value={monday}>
-                          {formatWeekRange(monday)}
-                          {i === 0 ? " · next week" : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-400">
-                    {slotsError ? (
-                      <span className="text-red-600">{slotsError}</span>
-                    ) : slotsFree === null ? (
-                      "Checking slots…"
-                    ) : (
-                      <>
-                        {slotsFree} of {SLOTS_PER_WEEK} slots free for{" "}
-                        {scopeLabel}.
-                        {noSlots
-                          ? " Delete a batch in that week or pick another."
-                          : ""}
-                      </>
-                    )}
-                  </p>
-                </div>
-              </div>
-
               {/* Headlines — optional. Scanned on demand, and only the items
                   ticked here reach the prompt. */}
               <div className="space-y-2 rounded-lg border p-3">
@@ -502,14 +411,11 @@ export function GenerateBatchModal() {
 
               <Button
                 onClick={handleGenerate}
-                disabled={noSlots}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               >
-                {noSlots
-                  ? "No slots free this week"
-                  : testMode
-                  ? `Generate ${willGenerate} Test Posts`
-                  : `Generate ${willGenerate} Posts`}
+                {testMode
+                  ? `Generate ${effectiveCount} Test Posts`
+                  : `Generate ${effectiveCount} Posts`}
               </Button>
             </div>
           </>

@@ -125,6 +125,16 @@ export default function LogsPage() {
                         >
                           {log.status}
                         </Badge>
+                        {/* Posted by hand, outside the app. Neutral styling —
+                            it is not a failure. */}
+                        {log.source === "manual" && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-gray-300 text-gray-600"
+                          >
+                            Manual
+                          </Badge>
+                        )}
                       </div>
                       {log.error_message && (
                         <p className="text-xs text-red-600 mt-0.5 max-w-md truncate">

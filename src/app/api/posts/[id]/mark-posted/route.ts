@@ -24,6 +24,11 @@ const CONTENT_COLUMN: Record<Scope, string> = {
   personal: "linkedin_personal_content",
 };
 
+// publish_logs.platform is CHECK-constrained to the four platform names, so
+// both scopes log as "linkedin" — the same folding publishPost does. The rows
+// are told apart by source, not by scope.
+const LOG_PLATFORM = "linkedin";
+
 function hasContent(post: Record<string, unknown>, scope: Scope): boolean {
   return String(post[CONTENT_COLUMN[scope]] || "").trim().length > 0;
 }
@@ -33,9 +38,9 @@ function hasContent(post: Record<string, unknown>, scope: Scope): boolean {
 // Deliberately separate from /publish: nothing here calls a publisher or
 // touches the LinkedIn API. It only records what already happened.
 //
-// No publish_logs row is written. That table has no column that can mark a
-// row as a manual publish — platform and status are both locked by CHECK
-// constraints — and adding one would be a schema change.
+// A publish_logs row is written alongside, with source "manual" so the
+// Publish Log can tell a hand-posted entry from one the API produced. Undo
+// removes that row again rather than leaving a record of something reversed.
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -106,6 +111,46 @@ export async function POST(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Keep the Publish Log in step. A logging failure must not fail the call —
+    // the post row is already correct, which is what the UI reads.
+    if (undo) {
+      // Both scopes log under platform "linkedin", so a post with both marked
+      // has two indistinguishable manual rows. Drop the newest one: undoing
+      // reverses the most recent mark, and the count stays right either way.
+      const { data: stale } = await supabase
+        .from("publish_logs")
+        .select("id")
+        .eq("post_id", params.id)
+        .eq("platform", LOG_PLATFORM)
+        .eq("source", "manual")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      const staleId = stale?.[0]?.id;
+      if (staleId) {
+        const { error: deleteError } = await supabase
+          .from("publish_logs")
+          .delete()
+          .eq("id", staleId);
+        if (deleteError) {
+          console.error("[mark-posted] could not remove log row:", deleteError);
+        }
+      }
+    } else {
+      const { error: logError } = await supabase.from("publish_logs").insert({
+        post_id: params.id,
+        platform: LOG_PLATFORM,
+        status: "success",
+        source: "manual",
+        // Nothing came back from an API — the post was shared by hand.
+        post_id_returned: null,
+        error_message: null,
+      });
+      if (logError) {
+        console.error("[mark-posted] could not write log row:", logError);
+      }
     }
 
     return NextResponse.json(updated);

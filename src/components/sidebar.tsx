@@ -10,6 +10,7 @@ import {
   Menu,
   ScrollText,
   ClipboardCheck,
+  NotebookPen,
   LogOut,
 } from "lucide-react";
 import { useState } from "react";
@@ -20,6 +21,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/batches", label: "Batches", icon: Layers },
+  { href: "/notes", label: "Notes", icon: NotebookPen },
   { href: "/ready-to-post", label: "Ready to Post", icon: ClipboardCheck },
   { href: "/logs", label: "Publish Log", icon: ScrollText },
   { href: "/settings", label: "Settings", icon: Settings },

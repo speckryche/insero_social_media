@@ -5,6 +5,7 @@ import { parseEnabledPlatforms } from "@/lib/platforms";
 import {
   headlinesForCategory,
   isHeadlineItem,
+  scanScopesForBatch,
   type HeadlineItem,
 } from "@/lib/headlines";
 import {
@@ -85,17 +86,24 @@ export async function POST(
     // period. Weekly batches look up by week — their month/year are NULL, so
     // the old month/year query silently matched nothing and quietly dropped
     // every picked headline. Legacy monthly batches keep the old lookup.
-    let pickedHeadlines: HeadlineItem[] = [];
+    const pickedHeadlines: HeadlineItem[] = [];
     if (useHeadlines) {
-      const { data: scans } = await supabase
-        .from("headline_scans")
-        .select("picked")
-        .order("created_at", { ascending: false })
-        .limit(1);
+      // Newest scan per feed scope this batch draws on, not simply the newest
+      // scan — otherwise a personal batch could pick up company headlines.
+      for (const feedScope of scanScopesForBatch(batch.scope)) {
+        const { data: scans } = await supabase
+          .from("headline_scans")
+          .select("picked")
+          .eq("scope", feedScope)
+          .order("created_at", { ascending: false })
+          .limit(1);
 
-      pickedHeadlines = ((scans?.[0]?.picked as HeadlineItem[]) || []).filter(
-        isHeadlineItem
-      );
+        pickedHeadlines.push(
+          ...((scans?.[0]?.picked as HeadlineItem[]) || []).filter(
+            isHeadlineItem
+          )
+        );
+      }
     }
 
     const enabledPlatforms = parseEnabledPlatforms(settings.enabled_platforms);

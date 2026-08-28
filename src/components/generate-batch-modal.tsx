@@ -25,6 +25,9 @@ import { Loader2, Plus, Sparkles, Newspaper, ExternalLink } from "lucide-react";
 import {
   HEADLINE_FEEDS,
   FEED_LABELS,
+  SCOPE_BY_FEED,
+  scanScopesForBatch,
+  type FeedScope,
   type HeadlineItem,
 } from "@/lib/headlines";
 import { POST_COUNT_PRESETS, DEFAULT_POST_COUNT } from "@/lib/post-count";
@@ -79,7 +82,8 @@ export function GenerateBatchModal() {
   const [progressIndex, setProgressIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [scanId, setScanId] = useState<string | null>(null);
+  // One scan id per feed scope — a "both" batch has two.
+  const [scanIds, setScanIds] = useState<Partial<Record<FeedScope, string>>>({});
   const [headlines, setHeadlines] = useState<HeadlineItem[]>([]);
   // Nothing is used unless it is ticked — headlines are opt-in per item.
   const [pickedIds, setPickedIds] = useState<string[]>([]);
@@ -89,15 +93,30 @@ export function GenerateBatchModal() {
     setScanning(true);
     setScanError(null);
     try {
-      const res = await fetch("/api/headlines/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Scan failed");
-      setHeadlines(data.items || []);
-      setScanId(data.scanId || null);
+      // Feeds belong to one audience each, so a "both" batch runs a scan per
+      // scope and shows the union. They run in parallel — one slow scope must
+      // not hold up the other.
+      const scopes = scanScopesForBatch(scope);
+      const results = await Promise.all(
+        scopes.map(async (feedScope) => {
+          const res = await fetch("/api/headlines/scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scope: feedScope }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Scan failed");
+          return data as { scanId: string; scope: FeedScope; items: HeadlineItem[] };
+        })
+      );
+
+      const nextScanIds: Partial<Record<FeedScope, string>> = {};
+      for (const result of results) {
+        if (result.scanId) nextScanIds[result.scope] = result.scanId;
+      }
+
+      setScanIds(nextScanIds);
+      setHeadlines(results.flatMap((r) => r.items || []));
       setPickedIds([]);
     } catch (err) {
       setScanError(err instanceof Error ? err.message : "Something went wrong");
@@ -125,13 +144,27 @@ export function GenerateBatchModal() {
     }, 60000);
 
     try {
-      // Persist the picks on the scan row before generating.
-      if (scanId && pickedIds.length > 0) {
-        await fetch("/api/headlines/scan", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scanId, headlineIds: pickedIds }),
-        }).catch(() => {});
+      // Persist the picks on the scan row each item came from. A feed belongs
+      // to exactly one scope, so every picked id routes to exactly one scan.
+      if (pickedIds.length > 0) {
+        const idsByScope: Partial<Record<FeedScope, string[]>> = {};
+        for (const item of headlines) {
+          if (!pickedIds.includes(item.id)) continue;
+          const feedScope = SCOPE_BY_FEED[item.feed];
+          (idsByScope[feedScope] ||= []).push(item.id);
+        }
+
+        await Promise.all(
+          Object.entries(idsByScope).map(([feedScope, ids]) => {
+            const id = scanIds[feedScope as FeedScope];
+            if (!id) return Promise.resolve();
+            return fetch("/api/headlines/scan", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ scanId: id, headlineIds: ids }),
+            }).catch(() => {});
+          })
+        );
       }
 
       const res = await fetch("/api/generate-batch", {
@@ -141,7 +174,9 @@ export function GenerateBatchModal() {
           testMode,
           scope,
           postCount: parseInt(postCount),
-          scanId,
+          // No scanId: a "both" batch has one scan per scope, so generation
+          // reads the newest scan for each scope the batch needs — which is
+          // the set this dialog just produced.
           headlineIds: pickedIds,
         }),
       });

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseListSetting, type ContentCategory } from "@/lib/prompts";
 import { parseEnabledPlatforms } from "@/lib/platforms";
-import { isHeadlineItem, headlinesForCategory, type HeadlineItem } from "@/lib/headlines";
+import {
+  isHeadlineItem,
+  headlinesForCategory,
+  scanScopesForBatch,
+  type HeadlineItem,
+} from "@/lib/headlines";
 import {
   getSupabase,
   categoriesForScope,
@@ -112,19 +117,32 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Generate posts — one category at a time
-    // Picked headlines, if the user ran a scan. Scans are no longer keyed to a
-    // period, so with no scan id the newest one wins.
+    // Picked headlines, if the user ran a scan. Scans are per feed scope now,
+    // so a "both" batch reads the newest scan from each — company feeds and
+    // personal feeds never overlap, so the merged ids stay unique.
     let pickedHeadlines: HeadlineItem[] = [];
     if (Array.isArray(headlineIds) && headlineIds.length > 0) {
-      let scanQuery = supabase.from("headline_scans").select("id, items");
-      scanQuery = scanId
-        ? scanQuery.eq("id", scanId)
-        : scanQuery.order("created_at", { ascending: false }).limit(1);
+      const scanned: HeadlineItem[] = [];
 
-      const { data: scans } = await scanQuery;
-      const items = ((scans?.[0]?.items as HeadlineItem[]) || []).filter(
-        isHeadlineItem
-      );
+      if (scanId) {
+        const { data: scans } = await supabase
+          .from("headline_scans")
+          .select("id, items")
+          .eq("id", scanId);
+        scanned.push(...((scans?.[0]?.items as HeadlineItem[]) || []));
+      } else {
+        for (const feedScope of scanScopesForBatch(scope)) {
+          const { data: scans } = await supabase
+            .from("headline_scans")
+            .select("id, items")
+            .eq("scope", feedScope)
+            .order("created_at", { ascending: false })
+            .limit(1);
+          scanned.push(...((scans?.[0]?.items as HeadlineItem[]) || []));
+        }
+      }
+
+      const items = scanned.filter(isHeadlineItem);
       pickedHeadlines = items.filter((item) => headlineIds.includes(item.id));
       console.log(
         `[generate-batch] using ${pickedHeadlines.length} picked headlines`

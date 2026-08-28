@@ -6,14 +6,16 @@ import {
   escapeRawControlCharsInStrings,
 } from "@/lib/json-repair";
 import {
-  HEADLINE_FEEDS,
+  FEEDS_BY_SCOPE,
+  HEADLINES_PER_FEED,
+  type FeedScope,
   type HeadlineFeed,
   type HeadlineItem,
 } from "@/lib/headlines";
 
-// How many headlines each feed is asked for, and the hard ceiling applied to
-// whatever the model actually returns.
-const HEADLINES_PER_FEED = 5;
+function isFeedScope(value: unknown): value is FeedScope {
+  return value === "company" || value === "personal";
+}
 
 function getSupabase() {
   return createClient(
@@ -25,11 +27,17 @@ function getSupabase() {
 // One brief per feed. Each runs as its own web-search call so a slow or empty
 // feed can't starve the others.
 const FEED_BRIEFS: Record<HeadlineFeed, string> = {
-  crypto:
-    "Major crypto industry events, regulation and policy moves, adoption by large companies, major product or chain launches, and notable price moves. Include price moves — the user decides what is worth posting about.",
   ai_tech: "The biggest AI and technology stories of the week.",
   ai_voice:
     "New AI features or announcements from RingCentral, Zoom, Dialpad, and Nextiva, and from UCaaS / CCaaS providers generally — AI receptionists, call summaries, agent assist, sentiment scoring, live translation, and similar.",
+  crypto:
+    "Major crypto industry events, regulation and policy moves, adoption by large companies, major product or chain launches, and notable price moves. Include price moves — the user decides what is worth posting about.",
+  ai_building:
+    "Building software with AI: coding agents, developer tooling, agent frameworks, evals, and accounts of what people shipped with them.",
+  small_business:
+    "Running a small company day to day — hiring, pricing, margins, operations, tooling, and the administrative grind.",
+  telecom_industry:
+    "The telecom industry as an operator sees it: copper retirement and PSTN sunsets, carrier mergers and consolidation, FCC and regulatory shifts, and changes to channel, agent and partner programs.",
 };
 
 // What separates a usable story from a merely true one, per feed. Kept apart
@@ -37,14 +45,34 @@ const FEED_BRIEFS: Record<HeadlineFeed, string> = {
 // own. The shared reader test lives in SYSTEM_PROMPT; these only add to it.
 const FEED_QUALIFIERS: Record<HeadlineFeed, string> = {
   crypto:
-    "This feed is for Speck's personal posts, not company posts. Look for stories with a genuine hook: a rule change, an unexpected outcome, something that would make a technical person stop and think. Skip daily price movement and anything that reads as investment advice or a trading call.",
+    "A rule change, an unexpected outcome, a story with a twist. Skip daily price movement.",
+  ai_building:
+    "The practical side of building with AI: coding agents, developer tooling, what people are actually shipping and where it breaks. Prefer hands-on accounts over announcements. Skip model benchmark releases and research with no near-term practical use.",
+  small_business:
+    "Running a small company: hiring, pricing, operations, the unglamorous parts. Prefer specifics and firsthand accounts over survey summaries and listicles.",
+  telecom_industry:
+    "Industry moves a telecom operator would find interesting even if a customer would not: copper retirement, carrier consolidation, regulatory shifts, channel and agent-program changes. This is the peer-audience version of ai_voice.",
   ai_tech:
     "AI where it reaches a small or mid-size business: tools they could actually adopt, what those cost, what AI is doing to staffing and day-to-day operations, and AI-driven fraud or security risk. Skip chip supply, model benchmark releases, and research announcements with no near-term effect on a small business.",
   ai_voice:
     "Business phone and contact center. Strongly prefer stories about these carriers, which Insero works with directly: RingCentral, Zoom, Nextiva, Dialpad, Microsoft Teams, GoToConnect. Other carriers are allowed but should not crowd these out. Look for product launches, feature changes, pricing changes, outages, end-of-life and sunset announcements, and regulatory deadlines. Skip vendor press releases that announce nothing a customer would notice.",
 };
 
-const SYSTEM_PROMPT = `You find recent, real news headlines and report them as JSON.
+// The shared rules both audiences obey. Only the reader test above them
+// differs, which is why the prompt is assembled per scope rather than shared.
+const SHARED_RULES = (perFeed: number) => `Rules:
+- Only include items published in the last 14 days.
+- Aim for ${perFeed} items. Fewer is fine; do not pad with weak or duplicate stories.
+- Never return the same story twice, even from different outlets.
+- Favor original sources — the company's own newsroom, the regulator, the primary outlet that broke it — over aggregators and rewrites.
+- Never invent an item, a URL, or a date. If you cannot find enough real items, return fewer.
+- "headline" is one line in plain English, not the outlet's headline verbatim if that headline is clickbait or jargon.
+- "summary" is a single sentence.
+- "published_date" is ISO format (YYYY-MM-DD).
+
+You must respond with valid JSON only. No markdown, no code fences, no extra text.`;
+
+const COMPANY_SYSTEM_PROMPT = `You find recent, real news headlines and report them as JSON.
 
 WHO THIS IS FOR:
 The reader is a small business owner or an IT manager at a small or mid-size
@@ -57,27 +85,36 @@ Reject in every feed: one company investing in or acquiring another, funding
 rounds, valuations, capital spending and data center budgets, stock moves,
 analyst market-size reports. This is not a finance feed.
 
-Rules:
-- Only include items published in the last 14 days.
-- Aim for ${HEADLINES_PER_FEED} items. Three is a fine floor; do not pad with weak or duplicate stories.
-- Never return the same story twice, even from different outlets.
-- Favor original sources — the company's own newsroom, the regulator, the primary outlet that broke it — over aggregators and rewrites.
-- Never invent an item, a URL, or a date. If you cannot find enough real items, return fewer.
-- "headline" is one line in plain English, not the outlet's headline verbatim if that headline is clickbait or jargon.
-- "summary" is a single sentence.
-- "published_date" is ISO format (YYYY-MM-DD).
+${SHARED_RULES(HEADLINES_PER_FEED.company)}`;
 
-You must respond with valid JSON only. No markdown, no code fences, no extra text.`;
+const PERSONAL_SYSTEM_PROMPT = `You find recent, real news headlines and report them as JSON.
+
+PERSONAL FEEDS: These become short posts in Speck's own voice — two to
+four sentences, like texting a friend. The test is not "would a customer
+care" but "would Speck actually bring this up." Prefer stories with a
+hook: something that changed, something that went wrong, something
+counterintuitive, something a technical person would want to argue about.
+Skip anything that reads as investment advice, a trading call, or a
+press release. Skip funding rounds, valuations, and acquisitions here too.
+
+${SHARED_RULES(HEADLINES_PER_FEED.personal)}`;
+
+const SYSTEM_PROMPT_BY_SCOPE: Record<FeedScope, string> = {
+  company: COMPANY_SYSTEM_PROMPT,
+  personal: PERSONAL_SYSTEM_PROMPT,
+};
 
 async function scanFeed(
   anthropic: Anthropic,
-  feed: HeadlineFeed
+  feed: HeadlineFeed,
+  scope: FeedScope
 ): Promise<HeadlineItem[]> {
+  const perFeed = HEADLINES_PER_FEED[scope];
   const message = await anthropic.messages.create({
     model: "claude-sonnet-5",
     max_tokens: 16000,
     output_config: { effort: "low" },
-    system: SYSTEM_PROMPT,
+    system: SYSTEM_PROMPT_BY_SCOPE[scope],
     // The _20260209 variant adds dynamic filtering, which does the narrowing
     // the qualifiers ask for. max_uses bounds the search loop — without it a
     // single feed can spend an unbounded number of round trips chasing its
@@ -90,7 +127,7 @@ async function scanFeed(
     messages: [
       {
         role: "user",
-        content: `Search the web and return up to ${HEADLINES_PER_FEED} recent headlines for this feed. Aim for ${HEADLINES_PER_FEED}; return fewer only if there genuinely are not that many real items in the window.
+        content: `Search the web and return up to ${perFeed} recent headlines for this feed. Aim for ${perFeed}; return fewer only if there genuinely are not that many real items in the window.
 
 FEED: ${feed}
 WHAT COUNTS: ${FEED_BRIEFS[feed]}
@@ -143,7 +180,7 @@ Return ONLY the JSON array. No markdown fences, no explanation, no extra text.`,
     )
     // The count lives in the prompt, so nothing stops the model overshooting.
     // Cut before the map so ids stay contiguous.
-    .slice(0, HEADLINES_PER_FEED)
+    .slice(0, perFeed)
     .map((item, i) => ({
       id: `${feed}-${i}`,
       feed,
@@ -160,16 +197,28 @@ Return ONLY the JSON array. No markdown fences, no explanation, no extra text.`,
     }));
 }
 
-// POST — scan all three feeds and store the result as a headline_scans row.
-export async function POST() {
+// POST — scan one scope's feeds and store the result as a headline_scans row.
+export async function POST(request: NextRequest) {
   try {
+    const body = await request.json().catch(() => ({}));
+    const scope = body.scope;
+
+    if (!isFeedScope(scope)) {
+      return NextResponse.json(
+        { error: 'scope must be "company" or "personal"' },
+        { status: 400 }
+      );
+    }
+
+    const feeds = FEEDS_BY_SCOPE[scope];
+
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
     // One call per feed, in parallel. A feed that throws yields no items
     // rather than failing the whole scan.
     const results = await Promise.all(
-      HEADLINE_FEEDS.map((feed) =>
-        scanFeed(anthropic, feed).catch((err) => {
+      feeds.map((feed) =>
+        scanFeed(anthropic, feed, scope).catch((err) => {
           console.error(`[headlines] ${feed} scan failed:`, err);
           return [] as HeadlineItem[];
         })
@@ -190,8 +239,8 @@ export async function POST() {
 
     const droppedAsDupes = results.flat().length - items.length;
     console.log(
-      `[headlines] scanned ${items.length} items: ` +
-        HEADLINE_FEEDS.map((f, i) => `${f}=${results[i].length}`).join(" ") +
+      `[headlines] scanned ${items.length} ${scope} items: ` +
+        feeds.map((f, i) => `${f}=${results[i].length}`).join(" ") +
         (droppedAsDupes > 0 ? ` (${droppedAsDupes} duplicate URLs dropped)` : "")
     );
 
@@ -201,7 +250,7 @@ export async function POST() {
       // Scans are identified on their own now — no period key. The
       // week_start_date / month / year columns stay in the table for the old
       // rows but are no longer written.
-      .insert({ items, picked: [] })
+      .insert({ scope, items, picked: [] })
       .select()
       .single();
 
@@ -209,7 +258,7 @@ export async function POST() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ scanId: scan.id, items });
+    return NextResponse.json({ scanId: scan.id, scope, items });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },

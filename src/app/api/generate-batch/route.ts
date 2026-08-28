@@ -41,10 +41,28 @@ import {
 // picked, which is before any POST happens. It reads that here rather than
 // running its own contention query, so the number it shows and the number the
 // POST enforces can never drift apart. Defaults to next Monday, same as POST.
+const SCOPE_LABELS: Record<BatchScope, string> = {
+  both: "Company + Personal",
+  company: "Company only",
+  personal: "Personal only",
+};
+
 export async function GET(request: NextRequest) {
   try {
     const raw = request.nextUrl.searchParams.get("weekStart");
     const weekStart = raw && raw !== "" ? raw : nextMonday();
+
+    // Slots are per scope, so the answer depends on which one is being asked
+    // about. "both" is the conservative default: it needs a slot free in the
+    // company lane and the personal lane at once.
+    const rawScope = request.nextUrl.searchParams.get("scope") || "both";
+    if (!["both", "company", "personal"].includes(rawScope)) {
+      return NextResponse.json(
+        { error: `Invalid scope: ${rawScope}` },
+        { status: 400 }
+      );
+    }
+    const scope = rawScope as BatchScope;
 
     if (!isISODate(weekStart)) {
       return NextResponse.json(
@@ -64,11 +82,12 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabase();
-    const takenSlots = await loadTakenSlotsForWeek(supabase, weekStart);
+    const takenSlots = await loadTakenSlotsForWeek(supabase, weekStart, scope);
 
     return NextResponse.json({
       weekStart,
       weekLabel: formatWeekRange(weekStart),
+      scope,
       slotsTotal: SLOTS_PER_WEEK,
       slotsFree: countFreeSlots(weekStart, takenSlots),
       hasStarted: weekStart < toISODate(new Date()),
@@ -166,19 +185,19 @@ export async function POST(request: NextRequest) {
       apiKey: process.env.ANTHROPIC_API_KEY!,
     });
 
-    // What the week already owes. Note the two rules read different sets on
-    // purpose: the conflict rule below ignores completed batches, because a
-    // finished week shouldn't block a new one — but slot contention counts
-    // every batch including completed ones, since a post that already went
-    // out on Monday morning still occupies Monday morning.
-    const takenSlots = await loadTakenSlotsForWeek(supabase, weekStart);
+    // What the week already owes this scope. Note the two rules read different
+    // sets on purpose: the conflict rule below ignores completed batches,
+    // because a finished week shouldn't block a new one — but slot contention
+    // counts every batch including completed ones, since a post that already
+    // went out on Monday morning still occupies Monday morning.
+    const takenSlots = await loadTakenSlotsForWeek(supabase, weekStart, scope);
     const slotsFree = countFreeSlots(weekStart, takenSlots);
 
     // One live batch per week per scope. A "both" batch occupies the company
-    // and personal halves at once, so it conflicts with anything; company-only
-    // and personal-only batches can coexist in the same week. They publish
-    // to different LinkedIn destinations, so sharing a week is fine — but not
-    // a slot, which is what takenSlots above is for.
+    // and personal lanes at once, so it conflicts with anything; company-only
+    // and personal-only batches can coexist in the same week and, because they
+    // publish to different LinkedIn destinations, may even share the same times
+    // — each lane has its own slots.
     const { data: existingBatches } = await supabase
       .from("batches")
       .select("id, status, scope")
@@ -195,12 +214,7 @@ export async function POST(request: NextRequest) {
 
     if (conflicting) {
       const existingScope = (conflicting.scope as BatchScope) || "both";
-      const describe = (value: BatchScope) =>
-        value === "both"
-          ? "Company + Personal"
-          : value === "company"
-          ? "Company only"
-          : "Personal only";
+      const describe = (value: BatchScope) => SCOPE_LABELS[value];
 
       const reason =
         existingScope === scope
@@ -216,6 +230,7 @@ export async function POST(request: NextRequest) {
         {
           error: reason + suggestion,
           weekStart,
+          scope,
           slotsTotal: SLOTS_PER_WEEK,
           slotsFree,
           existingBatchId: conflicting.id,
@@ -230,9 +245,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            `Every slot in the week of ${formatWeekRange(weekStart)} is already taken. ` +
-            `A week holds ${SLOTS_PER_WEEK} posts. Delete a batch in that week or choose another week.`,
+            `Every ${SCOPE_LABELS[scope]} slot in the week of ${formatWeekRange(weekStart)} is already taken. ` +
+            `A week holds ${SLOTS_PER_WEEK} posts per scope. Delete a batch in that week or choose another week.`,
           weekStart,
+          scope,
           slotsTotal: SLOTS_PER_WEEK,
           slotsFree: 0,
         },
@@ -297,17 +313,14 @@ export async function POST(request: NextRequest) {
 
     // 3. Generate posts — one category at a time
     // Picked headlines, if the user ran a scan. Falls back to the latest scan
-    // for the calendar month the week starts in when the dialog sent ids but
-    // no scan id — headline_scans is still keyed by month/year, and a week
-    // has to resolve to one of those to look itself up.
+    // for this same week when the dialog sent ids but no scan id.
     let pickedHeadlines: HeadlineItem[] = [];
     if (Array.isArray(headlineIds) && headlineIds.length > 0) {
       let scanQuery = supabase.from("headline_scans").select("id, items");
       scanQuery = scanId
         ? scanQuery.eq("id", scanId)
         : scanQuery
-            .eq("month", parseISODate(weekStart).getMonth() + 1)
-            .eq("year", parseISODate(weekStart).getFullYear())
+            .eq("week_start_date", weekStart)
             .order("created_at", { ascending: false })
             .limit(1);
 
@@ -538,6 +551,7 @@ export async function POST(request: NextRequest) {
       batchId: batch!.id,
       totalPosts: postsToSchedule.length,
       weekStart,
+      scope,
       slotsTotal: SLOTS_PER_WEEK,
       // What the week has left now this batch has taken its share, so the
       // dialog can show it without recomputing contention itself.

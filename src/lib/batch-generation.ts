@@ -82,6 +82,29 @@ export const COMPANY_CATEGORIES: ContentCategory[] = [
   "pots_speak",
 ];
 
+// Slots are per scope, not per week. The company page and Speck's profile are
+// different destinations, so a company post and a personal post can both go
+// out on Monday morning without clashing — each scope gets its own
+// SLOTS_PER_WEEK. A "both" batch covers both destinations, so it occupies a
+// slot in each lane at once.
+export type ScopeLane = "company" | "personal";
+
+export function scopeLanes(scope: BatchScope | null): ScopeLane[] {
+  // A NULL scope predates the column and covered everything.
+  if (scope === "company") return ["company"];
+  if (scope === "personal") return ["personal"];
+  return ["company", "personal"];
+}
+
+// Whether two batches would be reaching for the same slots.
+export function scopesCompete(
+  a: BatchScope | null,
+  b: BatchScope | null
+): boolean {
+  const lanesOfB = new Set(scopeLanes(b));
+  return scopeLanes(a).some((lane) => lanesOfB.has(lane));
+}
+
 export function categoriesForScope(scope: BatchScope): ContentCategory[] {
   if (scope === "company") return COMPANY_CATEGORIES;
   if (scope === "personal") return ["personal_take"];
@@ -383,25 +406,29 @@ export function slotKey(slot: {
   return `${slot.scheduled_date}|${slot.time_slot}`;
 }
 
-// Which slots in a week are already spoken for, across every batch in it.
+// Which of a week's slots are already spoken for, for one scope.
 //
-// A week holds only SLOTS_PER_WEEK posts, so a company batch and a personal
-// batch in the same week compete for them. The generate route and the
-// add-posts route both read contention through this one function, so the two
-// paths cannot disagree about what is taken.
+// Each scope has its own SLOTS_PER_WEEK, so only batches sharing a lane with
+// `scope` can take its slots: a personal batch never blocks a company slot,
+// but a "both" batch blocks both. The generate route and the add-posts route
+// read contention through this one function, so the two paths cannot disagree
+// about what is taken.
 //
 // Every batch in the week counts whatever its status — a completed batch's
 // posts still occupy the slot they went out in.
 export async function loadTakenSlotsForWeek(
   supabase: ReturnType<typeof getSupabase>,
-  weekStart: string
+  weekStart: string,
+  scope: BatchScope
 ): Promise<Set<string>> {
   const { data: weekBatches } = await supabase
     .from("batches")
-    .select("id")
+    .select("id, scope")
     .eq("week_start_date", weekStart);
 
-  const batchIds = (weekBatches || []).map((b) => String(b.id));
+  const batchIds = (weekBatches || [])
+    .filter((b) => scopesCompete((b.scope as BatchScope) ?? null, scope))
+    .map((b) => String(b.id));
   if (batchIds.length === 0) return new Set();
 
   const { data: posts } = await supabase

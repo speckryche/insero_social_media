@@ -165,7 +165,11 @@ export async function POST(
     // uses — that is what stops the two paths disagreeing. A legacy monthly
     // batch only ever competed with itself.
     const taken = weekStart
-      ? await loadTakenSlotsForWeek(supabase, weekStart)
+      ? await loadTakenSlotsForWeek(
+          supabase,
+          weekStart,
+          (batch.scope as BatchScope) ?? "both"
+        )
       : new Set(
           (existingPosts || []).map((p) =>
             slotKey({

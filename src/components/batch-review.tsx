@@ -73,15 +73,6 @@ import {
   type Platform,
 } from "@/lib/platforms";
 
-const STATUS_STYLES: Record<string, string> = {
-  draft: "bg-yellow-100 text-yellow-800",
-  edited: "bg-purple-100 text-purple-800",
-  approved: "bg-green-100 text-green-800",
-  scheduled: "bg-blue-100 text-blue-800",
-  published: "bg-gray-100 text-gray-700",
-  failed: "bg-red-100 text-red-800",
-};
-
 const BATCH_STATUS_STYLES: Record<string, string> = {
   draft: "bg-yellow-100 text-yellow-800 border-yellow-200",
   approved: "bg-blue-100 text-blue-800 border-blue-200",
@@ -533,9 +524,8 @@ export function BatchReview({
   }
 
   // A post counts as "approved" once every scope it has content for is
-  // approved — the same rule the header pill uses, so the counter and the
-  // pills can't tell different stories. Scheduled and published are past the
-  // approval gate already and always count.
+  // approved. Scheduled and published are past the approval gate already and
+  // always count.
   const approvedCount = posts.filter(
     (p) =>
       p.status === "scheduled" ||
@@ -1293,18 +1283,6 @@ export function BatchReview({
                       <ExternalLink className="h-3 w-3" />
                       Source
                     </a>
-                  )}
-                  {/* The API sets status="approved" as soon as either scope is
-                      approved, so this would read "Approved" on a half-done
-                      post. Show that state as Partial instead. */}
-                  {post.status === "approved" && !isFullyApproved(post) ? (
-                    <Badge className="text-xs bg-amber-100 text-amber-800">
-                      Partial
-                    </Badge>
-                  ) : (
-                    <Badge className={`text-xs ${STATUS_STYLES[post.status] || ""}`}>
-                      {post.status.charAt(0).toUpperCase() + post.status.slice(1)}
-                    </Badge>
                   )}
                 </div>
               </div>

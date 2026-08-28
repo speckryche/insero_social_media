@@ -69,6 +69,12 @@ export async function POST(
       );
     }
 
+    // A weekly batch schedules into its own Mon-Fri week. A legacy monthly
+    // batch has no week_start_date and keeps using the whole month.
+    const weekStart = batch.week_start_date
+      ? String(batch.week_start_date)
+      : null;
+
     // The category has to be one this batch's scope actually covers.
     const scope = (batch.scope as BatchScope) || "both";
     const allowed = categoriesForScope(scope);
@@ -94,14 +100,16 @@ export async function POST(
       );
     }
 
-    // Optionally reuse the picks from the most recent scan for this month.
+    // Optionally reuse the picks from the most recent scan for this batch's
+    // period. Weekly batches look up by week — their month/year are NULL, so
+    // the old month/year query silently matched nothing and quietly dropped
+    // every picked headline. Legacy monthly batches keep the old lookup.
     let pickedHeadlines: HeadlineItem[] = [];
     if (useHeadlines) {
-      const { data: scans } = await supabase
-        .from("headline_scans")
-        .select("picked")
-        .eq("month", batch.month)
-        .eq("year", batch.year)
+      const scanQuery = supabase.from("headline_scans").select("picked");
+      const { data: scans } = await (weekStart
+        ? scanQuery.eq("week_start_date", weekStart)
+        : scanQuery.eq("month", batch.month).eq("year", batch.year))
         .order("created_at", { ascending: false })
         .limit(1);
 
@@ -148,14 +156,9 @@ export async function POST(
       .select("post_number, scheduled_date, time_slot, content_category")
       .eq("batch_id", params.id);
 
-    // A weekly batch schedules into its own Mon-Fri week. A legacy monthly
-    // batch has no week_start_date, so it keeps using the whole month,
-    // weekends and all — the monthly drafts already in the database have to
-    // go on working exactly as they did.
-    const weekStart = batch.week_start_date
-      ? String(batch.week_start_date)
-      : null;
-
+    // Legacy monthly batches keep using the whole month, weekends and all —
+    // the monthly drafts already in the database have to go on working
+    // exactly as they did.
     const allSlots = weekStart
       ? buildWeekSlots(weekStart, settings)
       : buildAllSlots(Number(batch.month), Number(batch.year), settings);

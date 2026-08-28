@@ -12,6 +12,10 @@ import {
 } from "@/lib/headlines";
 import { nextMonday, isMonday, isISODate, dayName, parseISODate } from "@/lib/week";
 
+// How many headlines each feed is asked for, and the hard ceiling applied to
+// whatever the model actually returns.
+const HEADLINES_PER_FEED = 5;
+
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,11 +33,34 @@ const FEED_BRIEFS: Record<HeadlineFeed, string> = {
     "New AI features or announcements from RingCentral, Zoom, Dialpad, and Nextiva, and from UCaaS / CCaaS providers generally — AI receptionists, call summaries, agent assist, sentiment scoring, live translation, and similar.",
 };
 
+// What separates a usable story from a merely true one, per feed. Kept apart
+// from FEED_BRIEFS so the subject matter and the bar can be edited on their
+// own. The shared reader test lives in SYSTEM_PROMPT; these only add to it.
+const FEED_QUALIFIERS: Record<HeadlineFeed, string> = {
+  crypto:
+    "This feed is for Speck's personal posts, not company posts. Look for stories with a genuine hook: a rule change, an unexpected outcome, something that would make a technical person stop and think. Skip daily price movement and anything that reads as investment advice or a trading call.",
+  ai_tech:
+    "AI where it reaches a small or mid-size business: tools they could actually adopt, what those cost, what AI is doing to staffing and day-to-day operations, and AI-driven fraud or security risk. Skip chip supply, model benchmark releases, and research announcements with no near-term effect on a small business.",
+  ai_voice:
+    "Business phone and contact center. Strongly prefer stories about these carriers, which Insero works with directly: RingCentral, Zoom, Nextiva, Dialpad, Microsoft Teams, GoToConnect. Other carriers are allowed but should not crowd these out. Look for product launches, feature changes, pricing changes, outages, end-of-life and sunset announcements, and regulatory deadlines. Skip vendor press releases that announce nothing a customer would notice.",
+};
+
 const SYSTEM_PROMPT = `You find recent, real news headlines and report them as JSON.
+
+WHO THIS IS FOR:
+The reader is a small business owner or an IT manager at a small or mid-size
+company. A headline qualifies only if that person would care, and only if a
+technology broker could add something to it — a comment, a caution, a practical
+take, or a question worth arguing about. Prefer stories with a concrete change
+someone has to react to.
+
+Reject in every feed: one company investing in or acquiring another, funding
+rounds, valuations, capital spending and data center budgets, stock moves,
+analyst market-size reports. This is not a finance feed.
 
 Rules:
 - Only include items published in the last 14 days.
-- Aim for 10 items. Six is a fine floor; do not pad with weak or duplicate stories to reach ten.
+- Aim for ${HEADLINES_PER_FEED} items. Three is a fine floor; do not pad with weak or duplicate stories.
 - Never return the same story twice, even from different outlets.
 - Favor original sources — the company's own newsroom, the regulator, the primary outlet that broke it — over aggregators and rewrites.
 - Never invent an item, a URL, or a date. If you cannot find enough real items, return fewer.
@@ -52,20 +79,23 @@ async function scanFeed(
     max_tokens: 16000,
     output_config: { effort: "low" },
     system: SYSTEM_PROMPT,
-    // The _20260209 variant adds dynamic filtering, which matters more now
-    // that each feed is asked to go 10 deep. The installed SDK's tool-type
-    // union still stops at _20250305, so this is cast — the API accepts the
-    // newer type on Sonnet 5. Drop the cast once the SDK is upgraded.
+    // The _20260209 variant adds dynamic filtering, which does the narrowing
+    // the qualifiers ask for. max_uses bounds the search loop — without it a
+    // single feed can spend an unbounded number of round trips chasing its
+    // quota. The installed SDK's tool-type union still stops at _20250305 and
+    // has no max_uses, so this is cast — the API accepts both on Sonnet 5.
+    // Drop the cast once the SDK is upgraded.
     tools: [
-      { type: "web_search_20260209", name: "web_search" },
+      { type: "web_search_20260209", name: "web_search", max_uses: 4 },
     ] as unknown as Anthropic.MessageCreateParams["tools"],
     messages: [
       {
         role: "user",
-        content: `Search the web and return up to 10 recent headlines for this feed. Aim for 10; return fewer only if there genuinely are not that many real items in the window.
+        content: `Search the web and return up to ${HEADLINES_PER_FEED} recent headlines for this feed. Aim for ${HEADLINES_PER_FEED}; return fewer only if there genuinely are not that many real items in the window.
 
 FEED: ${feed}
 WHAT COUNTS: ${FEED_BRIEFS[feed]}
+WHAT QUALIFIES: ${FEED_QUALIFIERS[feed]}
 
 Return a JSON array. Each object must have exactly these fields:
 [
@@ -112,6 +142,9 @@ Return ONLY the JSON array. No markdown fences, no explanation, no extra text.`,
       (item) =>
         typeof item.headline === "string" && item.headline.trim().length > 0
     )
+    // The count lives in the prompt, so nothing stops the model overshooting.
+    // Cut before the map so ids stay contiguous.
+    .slice(0, HEADLINES_PER_FEED)
     .map((item, i) => ({
       id: `${feed}-${i}`,
       feed,

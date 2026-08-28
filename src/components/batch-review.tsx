@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,7 @@ import {
   BookmarkPlus,
   ExternalLink,
   Plus,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -66,6 +67,7 @@ import {
   batchScopeKey,
 } from "@/lib/batch-scope";
 import { batchPeriodLabel } from "@/lib/batch-period";
+import { parseISODate, toISODate, weekdaysOf } from "@/lib/week";
 import {
   DEFAULT_ENABLED_PLATFORMS,
   OPTIONAL_PLATFORMS,
@@ -180,6 +182,139 @@ function getWeekNumber(dateStr: string): number {
   return 4;
 }
 
+type Scope = "company" | "personal";
+
+function scopeContent(post: Post, scope: Scope): string {
+  const raw =
+    scope === "company" ? post.linkedin_content : post.linkedin_personal_content;
+  return String(raw || "").trim();
+}
+
+function isScopeApproved(post: Post, scope: Scope): boolean {
+  return scope === "company"
+    ? post.linkedin_company_approved === true
+    : post.linkedin_personal_approved === true;
+}
+
+// Company and personal approve independently, so the post as a whole only
+// reads as approved once every scope it actually has content for is approved.
+// A post with only one populated scope is done as soon as that scope is —
+// otherwise a company-only batch could never reach 100%.
+function isFullyApproved(post: Post): boolean {
+  const populated = (["company", "personal"] as Scope[]).filter(
+    (scope) => scopeContent(post, scope).length > 0
+  );
+  if (populated.length === 0) return false;
+  return populated.every((scope) => isScopeApproved(post, scope));
+}
+
+// ---- TXT export -----------------------------------------------------------
+
+const EXPORT_DIVIDER = "=".repeat(60);
+const SLOT_ORDER: Record<string, number> = { morning: 0, afternoon: 1 };
+
+// Schedule order, so the file reads the way the week runs rather than the way
+// the rows happen to come back.
+function compareForExport(a: Post, b: Post): number {
+  const byDate = String(a.scheduled_date || "").localeCompare(
+    String(b.scheduled_date || "")
+  );
+  if (byDate !== 0) return byDate;
+  const bySlot =
+    (SLOT_ORDER[String(a.time_slot)] ?? 9) - (SLOT_ORDER[String(b.time_slot)] ?? 9);
+  if (bySlot !== 0) return bySlot;
+  return (a.post_number ?? 0) - (b.post_number ?? 0);
+}
+
+// ai_speak -> "AI SPEAK"
+function exportCategory(category: string): string {
+  return String(category || "uncategorized").replace(/_/g, " ").toUpperCase();
+}
+
+// "Monday, Aug 31 · Morning"
+function exportDateLine(post: Post): string {
+  const parts: string[] = [];
+  if (post.scheduled_date) {
+    parts.push(
+      new Date(String(post.scheduled_date) + "T00:00:00").toLocaleDateString(
+        "en-US",
+        { weekday: "long", month: "short", day: "numeric" }
+      )
+    );
+  }
+  if (post.time_slot) {
+    const slot = String(post.time_slot);
+    parts.push(slot.charAt(0).toUpperCase() + slot.slice(1));
+  }
+  return parts.join(" · ");
+}
+
+// "Week of Mon Aug 31 – Fri Sep 4, 2026". Legacy monthly batches have no week,
+// so they fall back to the label the rest of the app shows them under.
+function exportPeriodLine(batch: Batch): string {
+  if (!batch.week_start_date) return batchPeriodLabel(batch);
+  const days = weekdaysOf(String(batch.week_start_date));
+  const short = (d: Date) =>
+    d
+      .toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      })
+      // en-US puts a comma after the weekday; the header reads better without.
+      .replace(",", "");
+  const monday = parseISODate(days[0]);
+  const friday = parseISODate(days[4]);
+  return `Week of ${short(monday)} – ${short(friday)}, ${friday.getFullYear()}`;
+}
+
+function buildExportText(batch: Batch, posts: Post[], scope: Scope): string {
+  const lines: string[] = [
+    `INSERO — ${scope === "company" ? "COMPANY" : "PERSONAL"} POSTS`,
+    exportPeriodLine(batch),
+    `${posts.length} approved post${posts.length === 1 ? "" : "s"}`,
+    "",
+  ];
+
+  // Numbered by position in the file, not post_number — unapproved posts are
+  // skipped, so the two would disagree.
+  posts.forEach((post, i) => {
+    lines.push(
+      EXPORT_DIVIDER,
+      `POST ${i + 1} — ${exportCategory(post.content_category)}`,
+      exportDateLine(post),
+      EXPORT_DIVIDER,
+      "",
+      scopeContent(post, scope),
+      ""
+    );
+  });
+
+  // CRLF throughout so the file opens cleanly in both TextEdit and Notepad.
+  // Only the line ending changes — the posts keep their own blank lines.
+  return lines.join("\n").replace(/\r?\n/g, "\r\n");
+}
+
+// Rendered twice — once in the toolbar, once under the post list.
+function DownloadButtons({
+  onDownload,
+}: {
+  onDownload: (scope: Scope) => void;
+}) {
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={() => onDownload("company")}>
+        <Download className="h-4 w-4 mr-1.5 text-blue-600" />
+        Download Company
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => onDownload("personal")}>
+        <Download className="h-4 w-4 mr-1.5 text-blue-600" />
+        Download Personal
+      </Button>
+    </>
+  );
+}
+
 // Copies one variant's plain text and confirms inline on the button itself.
 // There's no toast system in the app, and a card carries up to five of these,
 // so the confirmation stays where the click happened.
@@ -287,20 +422,26 @@ export function BatchReview({
     });
   }
 
-  // A post counts as "approved" if its overall status is approved/scheduled/
-  // published OR if either per-platform approval flag is true. The flag-true
-  // check covers rows from older clicks of the LinkedIn Personal/Company
-  // approve buttons (which used to only flip the flag and leave status
-  // alone). The Activate route now heals these into status="approved".
+  // A post counts as "approved" once every scope it has content for is
+  // approved — the same rule the header pill uses, so the counter and the
+  // pills can't tell different stories. Scheduled and published are past the
+  // approval gate already and always count.
   const approvedCount = posts.filter(
     (p) =>
-      p.status === "approved" ||
       p.status === "scheduled" ||
       p.status === "published" ||
-      p.linkedin_personal_approved === true ||
-      p.linkedin_company_approved === true
+      isFullyApproved(p)
   ).length;
   const approvalPercent = Math.round((approvedCount / posts.length) * 100);
+
+  const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
+  const noticeSeq = useRef(0);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   const filteredPosts = useMemo(() => {
     return posts.filter((post) => {
@@ -455,6 +596,49 @@ export function BatchReview({
     } finally {
       setLoadingAction(null);
     }
+  }
+
+  // Minimal stand-in for a toast — the app has none, and the download buttons
+  // render in two places, so an inline confirmation next to the click doesn't
+  // work here the way it does on CopyButton. Keyed by a counter so clicking
+  // twice with the same message re-shows it.
+  function showNotice(text: string) {
+    noticeSeq.current += 1;
+    setNotice({ id: noticeSeq.current, text });
+  }
+
+  function handleDownload(scope: Scope) {
+    const approved = posts
+      .filter((p) => isScopeApproved(p, scope) && scopeContent(p, scope).length > 0)
+      .sort(compareForExport);
+
+    if (approved.length === 0) {
+      showNotice(
+        `No ${scope} posts are approved yet — approve some before downloading.`
+      );
+      return;
+    }
+
+    const stamp = batch.week_start_date
+      ? String(batch.week_start_date)
+      : toISODate(new Date());
+    const blob = new Blob([buildExportText(batch, approved, scope)], {
+      type: "text/plain;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `insero-${scope}-${stamp}.txt`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+
+    showNotice(
+      `Downloaded ${approved.length} approved ${scope} post${
+        approved.length === 1 ? "" : "s"
+      }.`
+    );
   }
 
   async function handleToggleApprove(postId: string, type?: "personal" | "company") {
@@ -782,6 +966,8 @@ export function BatchReview({
                 : `Saved ${savedSamples}`
               : "Save edits as style samples"}
           </Button>
+
+          <DownloadButtons onDownload={handleDownload} />
 
           {(batch.status === "draft") && (
             <>
@@ -1148,9 +1334,18 @@ export function BatchReview({
                       Source
                     </a>
                   )}
-                  <Badge className={`text-xs ${STATUS_STYLES[post.status] || ""}`}>
-                    {post.status.charAt(0).toUpperCase() + post.status.slice(1)}
-                  </Badge>
+                  {/* The API sets status="approved" as soon as either scope is
+                      approved, so this would read "Approved" on a half-done
+                      post. Show that state as Partial instead. */}
+                  {post.status === "approved" && !isFullyApproved(post) ? (
+                    <Badge className="text-xs bg-amber-100 text-amber-800">
+                      Partial
+                    </Badge>
+                  ) : (
+                    <Badge className={`text-xs ${STATUS_STYLES[post.status] || ""}`}>
+                      {post.status.charAt(0).toUpperCase() + post.status.slice(1)}
+                    </Badge>
+                  )}
                 </div>
               </div>
             </CardHeader>
@@ -1487,21 +1682,50 @@ export function BatchReview({
                     </Button>
                   )}
 
-                  {/* Approve toggle for draft/edited posts */}
+                  {/* Approve per scope. These used to be one button that wrote
+                      both columns at once; each now reads and writes only its
+                      own, matching the buttons inside the two panels above. */}
                   {(post.status === "draft" || post.status === "edited" || post.status === "approved") && (
-                    <Button
-                      variant={post.status === "approved" ? "default" : "outline"}
-                      size="sm"
-                      className={`text-xs ${
-                        post.status === "approved"
-                          ? "bg-green-600 hover:bg-green-700"
-                          : ""
-                      }`}
-                      onClick={() => handleToggleApprove(post.id)}
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                      {post.status === "approved" ? "Approved" : "Approve"}
-                    </Button>
+                    <>
+                      <Button
+                        variant={post.linkedin_company_approved ? "default" : "outline"}
+                        size="sm"
+                        className={`text-xs ${
+                          post.linkedin_company_approved
+                            ? "bg-green-600 hover:bg-green-700"
+                            : ""
+                        }`}
+                        onClick={() => handleToggleApprove(post.id, "company")}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                        {post.linkedin_company_approved
+                          ? "Company Approved"
+                          : "Approve Company"}
+                      </Button>
+                      <Button
+                        variant={post.linkedin_personal_approved ? "default" : "outline"}
+                        size="sm"
+                        className={`text-xs ${
+                          post.linkedin_personal_approved
+                            ? "bg-green-600 hover:bg-green-700"
+                            : ""
+                        }`}
+                        onClick={() => handleToggleApprove(post.id, "personal")}
+                        // Disabled rather than hidden, so the pair stays in the
+                        // same place on every card.
+                        disabled={scopeContent(post, "personal").length === 0}
+                        title={
+                          scopeContent(post, "personal").length === 0
+                            ? "This post has no personal content"
+                            : undefined
+                        }
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                        {post.linkedin_personal_approved
+                          ? "Personal Approved"
+                          : "Approve Personal"}
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -1509,6 +1733,13 @@ export function BatchReview({
           </Card>
         ))}
       </div>
+
+      {/* Same downloads as the toolbar, for the end of a long list. */}
+      {posts.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <DownloadButtons onDownload={handleDownload} />
+        </div>
+      )}
 
       {/* Batch Completed Message */}
       {batch.status === "completed" && (
@@ -1551,6 +1782,16 @@ export function BatchReview({
           batchId={batch.id}
           onClose={() => setLearningOpen(false)}
         />
+      )}
+
+      {notice && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-50 max-w-sm rounded-lg bg-gray-900 px-4 py-3 text-sm text-white shadow-lg"
+        >
+          {notice.text}
+        </div>
       )}
 
       {addingPosts && (

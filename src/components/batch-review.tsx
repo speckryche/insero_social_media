@@ -256,13 +256,13 @@ function DownloadButtons({
 }) {
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => onDownload("company")}>
-        <Download className="h-4 w-4 mr-1.5 text-blue-600" />
-        Download Company
-      </Button>
       <Button variant="outline" size="sm" onClick={() => onDownload("personal")}>
         <Download className="h-4 w-4 mr-1.5 text-blue-600" />
         Download Personal
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => onDownload("company")}>
+        <Download className="h-4 w-4 mr-1.5 text-blue-600" />
+        Download Company
       </Button>
     </>
   );
@@ -852,16 +852,16 @@ export function BatchReview({
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex w-full flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <Link href="/batches">
             <Button variant="ghost" size="icon" className="shrink-0">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div>
-            <div className="flex items-center gap-3">
-              <h2 className="text-xl font-semibold text-gray-900">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h2 className="whitespace-nowrap text-xl font-semibold text-gray-900">
                 {batchPeriodLabel(batch)}
               </h2>
               <Badge
@@ -884,8 +884,10 @@ export function BatchReview({
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        {/* Action Buttons — wraps to as many lines as it needs. No shrink-0
+            here: that pinned the row at its natural width, which squeezed the
+            title to one word per line and pushed the last buttons off-screen. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
           {/* Reads the batch's edits and proposes Settings additions. Never
               applies anything on its own — every proposal is accepted or
               dismissed by hand in the dialog. */}

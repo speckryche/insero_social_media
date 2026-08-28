@@ -28,6 +28,8 @@ import {
 type Post = any;
 
 interface PostEditSheetProps {
+  /** Limit the content editors to one scope. Omit to edit every variant. */
+  scope?: "company" | "personal";
   post: Post;
   onClose: () => void;
   onSave: (updated: Post) => void;
@@ -35,6 +37,7 @@ interface PostEditSheetProps {
 }
 
 export function PostEditSheet({
+  scope,
   post,
   onClose,
   onSave,
@@ -58,11 +61,19 @@ export function PostEditSheet({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          linkedin_personal_content: linkedinPersonal,
-          linkedin_content: linkedin,
-          x_content: xContent,
-          facebook_content: facebook,
-          google_content: google,
+          // A scoped edit writes only its own content column, so saving the
+          // personal variant can never overwrite the company one.
+          ...(scope === "personal"
+            ? { linkedin_personal_content: linkedinPersonal }
+            : scope === "company"
+            ? { linkedin_content: linkedin }
+            : {
+                linkedin_personal_content: linkedinPersonal,
+                linkedin_content: linkedin,
+                x_content: xContent,
+                facebook_content: facebook,
+                google_content: google,
+              }),
           content_category: category,
           time_slot: timeSlot,
           status: "edited",
@@ -84,6 +95,7 @@ export function PostEditSheet({
         <SheetHeader className="px-6 pt-6 pb-4 border-b">
           <SheetTitle>
             Edit Post #{post.post_number}
+            {scope ? ` — ${scope === "company" ? "Company" : "Personal"}` : ""}
           </SheetTitle>
         </SheetHeader>
 
@@ -149,6 +161,7 @@ export function PostEditSheet({
             )}
 
             {/* LinkedIn Personal Profile */}
+            {scope !== "company" && (
             <div className="space-y-2">
               <Label>LinkedIn Personal Profile</Label>
               <Textarea
@@ -161,8 +174,10 @@ export function PostEditSheet({
                 {linkedinPersonal.length} characters
               </p>
             </div>
+            )}
 
             {/* LinkedIn Company Page */}
+            {scope !== "personal" && (
             <div className="space-y-2">
               <Label>LinkedIn Company Page</Label>
               <Textarea
@@ -175,7 +190,9 @@ export function PostEditSheet({
                 {linkedin.length} characters
               </p>
             </div>
+            )}
 
+            {!scope && (<>
             {/* X (Twitter) */}
             {enabledPlatforms.includes("x") && (
             <div className="space-y-2">
@@ -227,6 +244,7 @@ export function PostEditSheet({
               </p>
             </div>
             )}
+            </>)}
           </div>
         </ScrollArea>
 

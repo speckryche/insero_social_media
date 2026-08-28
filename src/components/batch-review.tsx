@@ -277,6 +277,151 @@ function DownloadButtons({
   );
 }
 
+// One self-contained scope column: header + Preview, the text, the drop zone,
+// its own action row, and its own approve control. Personal is blue
+// throughout, company green, including the 2px accent on top of the panel.
+const SCOPE_STYLES = {
+  personal: {
+    label: "LinkedIn Personal",
+    accent: "border-t-2 border-t-blue-500",
+    text: "text-blue-600",
+    approved: "bg-blue-600 hover:bg-blue-700",
+  },
+  company: {
+    label: "LinkedIn Company",
+    accent: "border-t-2 border-t-green-600",
+    text: "text-green-600",
+    approved: "bg-green-600 hover:bg-green-700",
+  },
+} as const;
+
+function ScopePanel({
+  post,
+  scope,
+  collapsed,
+  regenerating,
+  onPreview,
+  onEdit,
+  onRegenerate,
+  onToggleApprove,
+  onImageUpdated,
+  onNotice,
+}: {
+  post: Post;
+  scope: Scope;
+  collapsed: boolean;
+  regenerating: boolean;
+  onPreview: () => void;
+  onEdit: () => void;
+  onRegenerate: () => void;
+  onToggleApprove: () => void;
+  onImageUpdated: (post: Post) => void;
+  onNotice: (text: string) => void;
+}) {
+  const style = SCOPE_STYLES[scope];
+  const content = scopeContent(post, scope);
+  // An empty personal scope has nothing to act on, so every control in the
+  // panel goes inert rather than disappearing — the two columns stay aligned.
+  const empty = content.length === 0;
+  const approved = isScopeApproved(post, scope);
+  const Icon = scope === "personal" ? User : Building2;
+
+  return (
+    <div className={`rounded-lg border p-3 ${style.accent}`}>
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <Icon className={`h-3.5 w-3.5 ${style.text}`} />
+          <span className={`text-xs font-medium ${style.text}`}>
+            {style.label}
+          </span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          onClick={onPreview}
+          disabled={empty}
+        >
+          <Eye className="mr-1 h-3 w-3" />
+          Preview
+        </Button>
+      </div>
+
+      <p
+        className={`whitespace-pre-wrap text-sm text-gray-700 ${
+          collapsed ? "line-clamp-4" : ""
+        }`}
+      >
+        {content || "No personal content"}
+      </p>
+
+      <PostImageDropZone
+        post={post}
+        scope={scope}
+        imageUrl={
+          (scope === "company"
+            ? post.linkedin_image_url
+            : post.linkedin_personal_image_url) || null
+        }
+        enabled={!empty}
+        onUpdated={onImageUpdated}
+        onNotice={onNotice}
+      />
+
+      {/* Action row — each button acts on this scope only. */}
+      <div className="mt-3 flex flex-wrap items-center gap-1">
+        <CopyButton text={content} label={style.label} />
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          onClick={onEdit}
+          disabled={empty || post.status === "published"}
+        >
+          <Edit3 className="mr-1 h-3 w-3" />
+          Edit
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          onClick={onRegenerate}
+          disabled={empty || regenerating || post.status === "published"}
+        >
+          {regenerating ? (
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-1 h-3 w-3" />
+          )}
+          Regenerate
+        </Button>
+      </div>
+
+      <div className="mt-3 border-t pt-3">
+        {empty ? (
+          <p className="text-center text-xs text-gray-400">No personal post</p>
+        ) : (
+          <Button
+            variant={approved ? "default" : "outline"}
+            size="sm"
+            className={`w-full text-xs ${approved ? style.approved : ""}`}
+            onClick={onToggleApprove}
+          >
+            <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+            {approved
+              ? scope === "company"
+                ? "Company approved"
+                : "Personal approved"
+              : scope === "company"
+              ? "Approve company"
+              : "Approve personal"}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Copies one variant's plain text and confirms inline on the button itself.
 // There's no toast system in the app, and a card carries up to five of these,
 // so the confirmation stays where the click happened.
@@ -357,11 +502,17 @@ export function BatchReview({
   const [statusFilter, setStatusFilter] = useState("all");
   const [weekFilter, setWeekFilter] = useState("all");
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
-  const [editingPost, setEditingPost] = useState<Post | null>(null);
-  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ post: Post; scope: Scope } | null>(
+    null
+  );
+  // Keyed "<postId>:<scope>" — one scope regenerating must not spin the other.
+  const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
-  const [previewingPost, setPreviewingPost] = useState<Post | null>(null);
+  const [previewing, setPreviewing] = useState<{
+    post: Post;
+    scope: Scope;
+  } | null>(null);
   // Cards show full post text by default. Ids land here only when the user
   // collapses that card back down to a four-line preview.
   const [collapsedPostIds, setCollapsedPostIds] = useState<Set<string>>(new Set());
@@ -612,18 +763,25 @@ export function BatchReview({
     }
   }
 
-  async function handleRegenerate(postId: string) {
-    setRegeneratingId(postId);
+  // The route already branches on `type` — personal, company, or all. The UI
+  // only ever asks for one scope now.
+  async function handleRegenerate(postId: string, scope: Scope) {
+    setRegeneratingKey(`${postId}:${scope}`);
     try {
       const res = await fetch(`/api/posts/${postId}/regenerate`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: scope }),
       });
       if (res.ok) {
         const updated = await res.json();
         setPosts(posts.map((p) => (p.id === postId ? updated : p)));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showNotice(data.error || "Regenerate failed.");
       }
     } finally {
-      setRegeneratingId(null);
+      setRegeneratingKey(null);
     }
   }
 
@@ -634,7 +792,7 @@ export function BatchReview({
 
   function handlePostSaved(updatedPost: Post) {
     setPosts(posts.map((p) => (p.id === updatedPost.id ? updatedPost : p)));
-    setEditingPost(null);
+    setEditing(null);
   }
 
   async function handlePublishNow(postId: string) {
@@ -1153,91 +1311,31 @@ export function BatchReview({
             </CardHeader>
             <CardContent className="px-5 pb-4">
               {/* LinkedIn Personal & Company side by side */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                <div className="border rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1.5">
-                      <User className="h-3.5 w-3.5 text-blue-600" />
-                      <span className="text-xs font-medium text-gray-700">LinkedIn Personal</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <CopyButton
-                        text={post.linkedin_personal_content}
-                        label="LinkedIn Personal"
-                      />
-                      <Button
-                        variant={post.linkedin_personal_approved ? "default" : "outline"}
-                        size="sm"
-                        className={`text-xs h-6 px-2 ${
-                          post.linkedin_personal_approved
-                            ? "bg-green-600 hover:bg-green-700"
-                            : ""
-                        }`}
-                        onClick={() => handleToggleApprove(post.id, "personal")}
-                      >
-                        <CheckCircle2 className="h-3 w-3 mr-0.5" />
-                        {post.linkedin_personal_approved ? "Approved" : "Approve"}
-                      </Button>
-                    </div>
-                  </div>
-                  <p
-                    className={`text-sm text-gray-700 whitespace-pre-wrap ${
-                      collapsedPostIds.has(post.id) ? "line-clamp-4" : ""
-                    }`}
-                  >
-                    {post.linkedin_personal_content || "No personal content"}
-                  </p>
-                  <PostImageDropZone
-                    post={post}
-                    scope="personal"
-                    imageUrl={post.linkedin_personal_image_url || null}
-                    enabled={scopeContent(post, "personal").length > 0}
-                    onUpdated={handlePostImageUpdated}
-                    onNotice={showNotice}
-                  />
-                </div>
-                <div className="border rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1.5">
-                      <Building2 className="h-3.5 w-3.5 text-blue-600" />
-                      <span className="text-xs font-medium text-gray-700">LinkedIn Company</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <CopyButton
-                        text={post.linkedin_content}
-                        label="LinkedIn Company"
-                      />
-                      <Button
-                        variant={post.linkedin_company_approved ? "default" : "outline"}
-                        size="sm"
-                        className={`text-xs h-6 px-2 ${
-                          post.linkedin_company_approved
-                            ? "bg-green-600 hover:bg-green-700"
-                            : ""
-                        }`}
-                        onClick={() => handleToggleApprove(post.id, "company")}
-                      >
-                        <CheckCircle2 className="h-3 w-3 mr-0.5" />
-                        {post.linkedin_company_approved ? "Approved" : "Approve"}
-                      </Button>
-                    </div>
-                  </div>
-                  <p
-                    className={`text-sm text-gray-700 whitespace-pre-wrap ${
-                      collapsedPostIds.has(post.id) ? "line-clamp-4" : ""
-                    }`}
-                  >
-                    {post.linkedin_content}
-                  </p>
-                  <PostImageDropZone
-                    post={post}
-                    scope="company"
-                    imageUrl={post.linkedin_image_url || null}
-                    enabled={scopeContent(post, "company").length > 0}
-                    onUpdated={handlePostImageUpdated}
-                    onNotice={showNotice}
-                  />
-                </div>
+              <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <ScopePanel
+                  post={post}
+                  scope="personal"
+                  collapsed={collapsedPostIds.has(post.id)}
+                  regenerating={regeneratingKey === `${post.id}:personal`}
+                  onPreview={() => setPreviewing({ post, scope: "personal" })}
+                  onEdit={() => setEditing({ post, scope: "personal" })}
+                  onRegenerate={() => handleRegenerate(post.id, "personal")}
+                  onToggleApprove={() => handleToggleApprove(post.id, "personal")}
+                  onImageUpdated={handlePostImageUpdated}
+                  onNotice={showNotice}
+                />
+                <ScopePanel
+                  post={post}
+                  scope="company"
+                  collapsed={collapsedPostIds.has(post.id)}
+                  regenerating={regeneratingKey === `${post.id}:company`}
+                  onPreview={() => setPreviewing({ post, scope: "company" })}
+                  onEdit={() => setEditing({ post, scope: "company" })}
+                  onRegenerate={() => handleRegenerate(post.id, "company")}
+                  onToggleApprove={() => handleToggleApprove(post.id, "company")}
+                  onImageUpdated={handlePostImageUpdated}
+                  onNotice={showNotice}
+                />
               </div>
 
               {/* Other platform tabs */}
@@ -1359,43 +1457,6 @@ export function BatchReview({
                     </>
                   )}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                  onClick={() => setPreviewingPost(post)}
-                >
-                  <Eye className="h-3.5 w-3.5 mr-1" />
-                  Preview
-                </Button>
-                {post.status !== "published" && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => setEditingPost(post)}
-                    >
-                      <Edit3 className="h-3.5 w-3.5 mr-1" />
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => handleRegenerate(post.id)}
-                      disabled={regeneratingId === post.id}
-                    >
-                      {regeneratingId === post.id ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      Regenerate
-                    </Button>
-                  </>
-                )}
-
                 {/* Retry button for failed posts */}
                 {post.status === "failed" && (
                   <Button
@@ -1442,51 +1503,6 @@ export function BatchReview({
                     </Button>
                   )}
 
-                  {/* Approve per scope. These used to be one button that wrote
-                      both columns at once; each now reads and writes only its
-                      own, matching the buttons inside the two panels above. */}
-                  {(post.status === "draft" || post.status === "edited" || post.status === "approved") && (
-                    <>
-                      <Button
-                        variant={post.linkedin_company_approved ? "default" : "outline"}
-                        size="sm"
-                        className={`text-xs ${
-                          post.linkedin_company_approved
-                            ? "bg-green-600 hover:bg-green-700"
-                            : ""
-                        }`}
-                        onClick={() => handleToggleApprove(post.id, "company")}
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                        {post.linkedin_company_approved
-                          ? "Company Approved"
-                          : "Approve Company"}
-                      </Button>
-                      <Button
-                        variant={post.linkedin_personal_approved ? "default" : "outline"}
-                        size="sm"
-                        className={`text-xs ${
-                          post.linkedin_personal_approved
-                            ? "bg-green-600 hover:bg-green-700"
-                            : ""
-                        }`}
-                        onClick={() => handleToggleApprove(post.id, "personal")}
-                        // Disabled rather than hidden, so the pair stays in the
-                        // same place on every card.
-                        disabled={scopeContent(post, "personal").length === 0}
-                        title={
-                          scopeContent(post, "personal").length === 0
-                            ? "This post has no personal content"
-                            : undefined
-                        }
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                        {post.linkedin_personal_approved
-                          ? "Personal Approved"
-                          : "Approve Personal"}
-                      </Button>
-                    </>
-                  )}
                 </div>
               </div>
             </CardContent>
@@ -1519,20 +1535,22 @@ export function BatchReview({
       )}
 
       {/* Edit Sheet */}
-      {editingPost && (
+      {editing && (
         <PostEditSheet
-          post={editingPost}
-          onClose={() => setEditingPost(null)}
+          post={editing.post}
+          scope={editing.scope}
+          onClose={() => setEditing(null)}
           onSave={handlePostSaved}
           enabledPlatforms={enabledPlatforms}
         />
       )}
 
       {/* Preview Modal */}
-      {previewingPost && (
+      {previewing && (
         <PostPreviewModal
-          post={previewingPost}
-          onClose={() => setPreviewingPost(null)}
+          post={previewing.post}
+          scope={previewing.scope}
+          onClose={() => setPreviewing(null)}
           enabledPlatforms={enabledPlatforms}
         />
       )}

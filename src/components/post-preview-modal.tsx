@@ -21,17 +21,78 @@ interface PostPreviewModalProps {
   post: Post;
   onClose: () => void;
   enabledPlatforms?: Platform[];
+  /** Show one scope only, with no tabs. Omit for the full tabbed preview. */
+  scope?: "company" | "personal";
 }
 
 export function PostPreviewModal({
   post,
   onClose,
   enabledPlatforms = DEFAULT_ENABLED_PLATFORMS,
+  scope,
 }: PostPreviewModalProps) {
   // Personal + Company are always shown; the rest follow the toggle.
   const extraPlatforms = OPTIONAL_PLATFORMS.filter((p) =>
     enabledPlatforms.includes(p)
   );
+  // Opened from a scope panel: one card, no tab strip.
+  if (scope) {
+    const isCompany = scope === "company";
+    return (
+      <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="text-sm">
+              Preview Post #{post.post_number} — {isCompany ? "Company" : "Personal"}
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[50vh] mt-3">
+            <div className="bg-white border rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold ${
+                    isCompany ? "bg-[#1B2A4A]" : "bg-gray-600"
+                  }`}
+                >
+                  {isCompany ? "I" : "P"}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {isCompany ? "Insero" : "Personal Profile"}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {isCompany
+                      ? "Technology. Simplified."
+                      : "Telecom Consultant at Insero"}
+                  </p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-800 whitespace-pre-line leading-relaxed">
+                {(isCompany
+                  ? post.linkedin_content
+                  : post.linkedin_personal_content) || "No personal content"}
+              </p>
+              {(isCompany
+                ? post.linkedin_image_url
+                : post.linkedin_personal_image_url) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={
+                    isCompany
+                      ? post.linkedin_image_url
+                      : post.linkedin_personal_image_url
+                  }
+                  alt="Post image"
+                  className="w-full rounded border"
+                />
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-lg max-h-[85vh]">

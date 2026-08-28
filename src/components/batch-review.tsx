@@ -33,6 +33,7 @@ import {
   Play,
   CheckCheck,
   Send,
+  X,
   RotateCcw,
   XCircle,
   AlertTriangle,
@@ -144,6 +145,23 @@ function isScopeApproved(post: Post, scope: Scope): boolean {
 // reads as approved once every scope it actually has content for is approved.
 // A post with only one populated scope is done as soon as that scope is —
 // otherwise a company-only batch could never reach 100%.
+function isScopePublished(post: Post, scope: Scope): boolean {
+  return scope === "company"
+    ? post.linkedin_published === true
+    : post.linkedin_personal_published === true;
+}
+
+// " · Aug 28" — the day it went out, when we know it.
+function postedOnLabel(post: Post): string {
+  if (!post.published_at) return "";
+  const when = new Date(post.published_at);
+  if (Number.isNaN(when.getTime())) return "";
+  return ` · ${when.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })}`;
+}
+
 function isFullyApproved(post: Post): boolean {
   const populated = (["company", "personal"] as Scope[]).filter(
     (scope) => scopeContent(post, scope).length > 0
@@ -243,6 +261,8 @@ function ScopePanel({
   onEdit,
   onRegenerate,
   onToggleApprove,
+  onMarkPosted,
+  markingPosted,
   onImageUpdated,
   onNotice,
 }: {
@@ -254,6 +274,8 @@ function ScopePanel({
   onEdit: () => void;
   onRegenerate: () => void;
   onToggleApprove: () => void;
+  onMarkPosted: (undo: boolean) => void;
+  markingPosted: boolean;
   onImageUpdated: (post: Post) => void;
   onNotice: (text: string) => void;
 }) {
@@ -263,6 +285,7 @@ function ScopePanel({
   // panel goes inert rather than disappearing — the two columns stay aligned.
   const empty = content.length === 0;
   const approved = isScopeApproved(post, scope);
+  const published = isScopePublished(post, scope);
   const Icon = scope === "personal" ? User : Building2;
 
   return (
@@ -339,22 +362,66 @@ function ScopePanel({
       <div className="mt-3 border-t pt-3">
         {empty ? (
           <p className="text-center text-xs text-gray-400">No personal post</p>
+        ) : published ? (
+          // Already out. Non-interactive text plus a small X to reverse a
+          // mis-click — the only way back from here.
+          <div className="flex items-center justify-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+              Posted manually{postedOnLabel(post)}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 shrink-0 p-0 text-gray-400 hover:text-red-600"
+              onClick={() => onMarkPosted(true)}
+              disabled={markingPosted}
+              aria-label={`Undo posted for ${scope}`}
+              title="Not actually posted — undo"
+            >
+              {markingPosted ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <X className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </div>
         ) : (
-          <Button
-            variant={approved ? "default" : "outline"}
-            size="sm"
-            className={`w-full text-xs ${approved ? style.approved : ""}`}
-            onClick={onToggleApprove}
-          >
-            <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-            {approved
-              ? scope === "company"
-                ? "Company approved"
-                : "Personal approved"
-              : scope === "company"
-              ? "Approve company"
-              : "Approve personal"}
-          </Button>
+          <div className="space-y-2">
+            <Button
+              variant={approved ? "default" : "outline"}
+              size="sm"
+              className={`w-full text-xs ${approved ? style.approved : ""}`}
+              onClick={onToggleApprove}
+            >
+              <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+              {approved
+                ? scope === "company"
+                  ? "Company approved"
+                  : "Personal approved"
+                : scope === "company"
+                ? "Approve company"
+                : "Approve personal"}
+            </Button>
+            {/* Only offered once this scope is approved and still unposted —
+                for a post shared on LinkedIn by hand, outside the app. */}
+            {approved && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => onMarkPosted(false)}
+                disabled={markingPosted}
+              >
+                {markingPosted ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="mr-1 h-3.5 w-3.5" />
+                )}
+                Mark as posted
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -445,6 +512,7 @@ export function BatchReview({
   );
   // Keyed "<postId>:<scope>" — one scope regenerating must not spin the other.
   const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
+  const [markingPostedKey, setMarkingPostedKey] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState<{
@@ -714,6 +782,31 @@ export function BatchReview({
       }
     } finally {
       setRegeneratingKey(null);
+    }
+  }
+
+  // Records a hand-posted scope, or reverses one. Keyed "<postId>:<scope>"
+  // so one column's spinner doesn't spin the other's.
+  async function handleMarkPosted(postId: string, scope: Scope, undo: boolean) {
+    setMarkingPostedKey(`${postId}:${scope}`);
+    try {
+      const res = await fetch(`/api/posts/${postId}/mark-posted`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope, undo }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showNotice(data.error || "Could not update the posted state.");
+        return;
+      }
+      setPosts(posts.map((p) => (p.id === postId ? data : p)));
+    } catch (err) {
+      showNotice(
+        err instanceof Error ? err.message : "Could not update the posted state."
+      );
+    } finally {
+      setMarkingPostedKey(null);
     }
   }
 
@@ -1221,6 +1314,8 @@ export function BatchReview({
                   onEdit={() => setEditing({ post, scope: "personal" })}
                   onRegenerate={() => handleRegenerate(post.id, "personal")}
                   onToggleApprove={() => handleToggleApprove(post.id, "personal")}
+                  onMarkPosted={(undo) => handleMarkPosted(post.id, "personal", undo)}
+                  markingPosted={markingPostedKey === `${post.id}:personal`}
                   onImageUpdated={handlePostImageUpdated}
                   onNotice={showNotice}
                 />
@@ -1233,6 +1328,8 @@ export function BatchReview({
                   onEdit={() => setEditing({ post, scope: "company" })}
                   onRegenerate={() => handleRegenerate(post.id, "company")}
                   onToggleApprove={() => handleToggleApprove(post.id, "company")}
+                  onMarkPosted={(undo) => handleMarkPosted(post.id, "company", undo)}
+                  markingPosted={markingPostedKey === `${post.id}:company`}
                   onImageUpdated={handlePostImageUpdated}
                   onNotice={showNotice}
                 />

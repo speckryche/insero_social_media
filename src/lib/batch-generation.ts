@@ -159,132 +159,14 @@ export function allocateByMix(
   return counts;
 }
 
-export type ImageTemplateType =
-  | "stat_card"
-  | "quote_card"
-  | "tip_graphic"
-  | "comparison"
-  | "savings_highlight"
-  | "myth_buster"
-  | "did_you_know"
-  | "checklist"
-  | "photo_landscape"
-  | "photo_tip"
-  | "photo_stat"
-  | "photo_quote"
-  | "photo_overlay_right"
-  | "photo_overlay_left";
-
 export interface GeneratedPost {
   linkedin_content: string;
   linkedin_personal_content: string;
   x_content: string;
   facebook_content: string;
   google_content: string;
-  image_headline?: string;
-  image_body?: string;
-  image_stat_number?: string;
-  image_stat_label?: string;
   // 1-based index into the headlines shown to this category, or null.
   headline_index?: number | null;
-}
-
-export function assignImageTemplate(
-  category: ContentCategory,
-  indexInCategory: number
-): { image_template_type: ImageTemplateType | null } {
-  // Base canvas template per category, before photo templates are mixed in.
-  let base: { image_template_type: ImageTemplateType | null };
-  switch (category) {
-    case "ai_speak":
-      // The priority category — most posts carry an image.
-      base = { image_template_type: indexInCategory % 2 === 0 ? "tip_graphic" : "checklist",
-      };
-      break;
-    case "tech_speak":
-      base = indexInCategory % 2 === 1
-        ? { image_template_type: indexInCategory % 4 === 1 ? "tip_graphic" : "checklist",
-          }
-        : { image_template_type: null };
-      break;
-    case "quote_speak":
-      base = indexInCategory % 2 === 0
-        ? { image_template_type: indexInCategory % 4 === 0 ? "quote_card" : "savings_highlight",
-          }
-        : { image_template_type: null };
-      break;
-    case "cost_speak":
-      // No dollar figures allowed in this category, so the stat templates are
-      // deliberately not used — comparisons and checklists carry the idea.
-      base = indexInCategory % 2 === 0
-        ? { image_template_type: indexInCategory % 4 === 0 ? "comparison" : "checklist",
-          }
-        : { image_template_type: null };
-      break;
-    case "pots_speak":
-      // A running series about what to check and what replaces what — lists
-      // and tip cards carry it better than stat or quote templates.
-      base = { image_template_type: indexInCategory % 2 === 0 ? "checklist" : "tip_graphic",
-      };
-      break;
-    case "personal_take":
-      base = { image_template_type: null };
-      break;
-    default:
-      base = { image_template_type: null };
-  }
-
-  // Photo template injection — give the feed a natural mix of overlay,
-  // photo, and graphic templates. Distribution per category from the brand
-  // brief. photo_overlay_* templates dominate eligible categories now.
-  const rand = Math.random();
-
-  if (category === "quote_speak" || category === "personal_take") {
-    // 40% overlay_right, 20% overlay_left, 20% photo_landscape, 20% base
-    if (rand < 0.40) return { image_template_type: "photo_overlay_right" };
-    if (rand < 0.60) return { image_template_type: "photo_overlay_left" };
-    if (rand < 0.80) return { image_template_type: "photo_landscape" };
-    return base;
-  }
-
-  if (category === "tech_speak") {
-    // 35% overlay_right, 15% overlay_left, 25% photo_tip, 25% tip_graphic
-    if (rand < 0.35) return { image_template_type: "photo_overlay_right" };
-    if (rand < 0.50) return { image_template_type: "photo_overlay_left" };
-    if (rand < 0.75) return { image_template_type: "photo_tip" };
-    return { image_template_type: "tip_graphic" };
-  }
-
-  if (category === "ai_speak") {
-    // 35% overlay_right, 15% overlay_left, 25% photo_tip, 25% existing canvas.
-    // The priority category leans on photo templates so the feed doesn't turn
-    // into a wall of graphics.
-    if (rand < 0.35) return { image_template_type: "photo_overlay_right" };
-    if (rand < 0.50) return { image_template_type: "photo_overlay_left" };
-    if (rand < 0.75) return { image_template_type: "photo_tip" };
-    return base;
-  }
-
-  if (category === "cost_speak") {
-    // 35% overlay_right, 15% overlay_left, 25% checklist, 25% comparison —
-    // value questions read best as lists and before/after pairs. No stat
-    // templates: this category may not use numbers.
-    if (rand < 0.35) return { image_template_type: "photo_overlay_right" };
-    if (rand < 0.50) return { image_template_type: "photo_overlay_left" };
-    if (rand < 0.75) return { image_template_type: "checklist" };
-    return { image_template_type: "comparison" };
-  }
-
-  if (category === "pots_speak") {
-    // 35% overlay_right, 15% overlay_left, rest on the checklist / tip_graphic
-    // base — copper posts are practical, so the list templates do the work.
-    if (rand < 0.35) return { image_template_type: "photo_overlay_right" };
-    if (rand < 0.50) return { image_template_type: "photo_overlay_left" };
-    return base;
-  }
-
-  // Any other category falls through to the base rule.
-  return base;
 }
 
 export function isWeekend(date: Date): boolean {
@@ -646,41 +528,5 @@ export async function generateCategoryPosts(
     headline_index:
       typeof post.headline_index === "number" ? post.headline_index : null,
   }));
-}
-
-export async function generateImagesForPost(
-  postId: string,
-  imageTemplateType: string,
-  imageData: {
-    headline: string;
-    bodyText: string;
-    statNumber?: string;
-    statLabel?: string;
-    category?: string;
-  },
-  baseUrl: string
-) {
-  const platforms = ["linkedin", "x", "facebook", "google", "linkedin_personal"];
-
-  for (const platform of platforms) {
-    try {
-      await fetch(`${baseUrl}/api/generate-image`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          postId,
-          templateType: imageTemplateType,
-          headline: imageData.headline,
-          bodyText: imageData.bodyText,
-          statNumber: imageData.statNumber,
-          statLabel: imageData.statLabel,
-          category: imageData.category,
-          platform,
-        }),
-      });
-    } catch (err) {
-      console.error(`Image generation failed for post ${postId}, platform ${platform}:`, err);
-    }
-  }
 }
 

@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // - /login: the sign-in page itself.
 // - /api/publish: the cron endpoint, authenticated via Bearer CRON_SECRET
 //   inside its own route handler.
-const PUBLIC_PATHS = ["/login", "/api/publish", "/api/preview-template"];
+const PUBLIC_PATHS = ["/login", "/api/publish"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(

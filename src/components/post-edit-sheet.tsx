@@ -10,7 +10,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -50,14 +49,6 @@ export function PostEditSheet({
   const [timeSlot, setTimeSlot] = useState(post.time_slot);
   // Image presence now comes from the scope image URL columns, not has_image.
   // The template fields below stay editable whenever a template is set.
-  const hasImage = !!post.linkedin_image_url || !!post.image_template_type;
-  const [imageTemplate, setImageTemplate] = useState(
-    post.image_template_type || ""
-  );
-  const [imageHeadline, setImageHeadline] = useState(post.image_headline || "");
-  const [imageBody, setImageBody] = useState(post.image_body || "");
-  const [imageStatNumber, setImageStatNumber] = useState(post.image_stat_number || "");
-  const [imageStatLabel, setImageStatLabel] = useState(post.image_stat_label || "");
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
@@ -74,11 +65,6 @@ export function PostEditSheet({
           google_content: google,
           content_category: category,
           time_slot: timeSlot,
-          image_template_type: hasImage ? imageTemplate || null : null,
-          image_headline: hasImage ? imageHeadline || null : null,
-          image_body: hasImage ? imageBody || null : null,
-          image_stat_number: hasImage ? imageStatNumber || null : null,
-          image_stat_label: hasImage ? imageStatLabel || null : null,
           status: "edited",
         }),
       });
@@ -146,83 +132,21 @@ export function PostEditSheet({
               </p>
             </div>
 
-            {/* Image settings */}
-            <div className="space-y-3">
-              {hasImage && (
-                <>
-                  <Select value={imageTemplate} onValueChange={setImageTemplate}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select template type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="stat_card">Stat Card</SelectItem>
-                      <SelectItem value="tip_graphic">Tip Graphic</SelectItem>
-                      <SelectItem value="quote_card">Quote Card</SelectItem>
-                      <SelectItem value="comparison">Comparison</SelectItem>
-                      <SelectItem value="savings_highlight">Savings Highlight</SelectItem>
-                      <SelectItem value="myth_buster">Myth Buster</SelectItem>
-                      <SelectItem value="did_you_know">Did You Know</SelectItem>
-                      <SelectItem value="checklist">Checklist</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  {/* Image data fields */}
-                  <div className="space-y-3 border rounded-lg p-3 bg-gray-50">
-                    <Label className="text-xs text-gray-500 uppercase">Image Data</Label>
-                    <div className="space-y-2">
-                      <Label className="text-xs">Headline (max 8 words)</Label>
-                      <Input
-                        value={imageHeadline}
-                        onChange={(e) => setImageHeadline(e.target.value)}
-                        placeholder="e.g., 73% of businesses overpay"
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs">Body (max 15 words)</Label>
-                      <Input
-                        value={imageBody}
-                        onChange={(e) => setImageBody(e.target.value)}
-                        placeholder="e.g., Most don't know until an audit reveals it"
-                        className="text-sm"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label className="text-xs">Stat Number</Label>
-                        <Input
-                          value={imageStatNumber}
-                          onChange={(e) => setImageStatNumber(e.target.value)}
-                          placeholder="e.g., 73%"
-                          className="text-sm"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs">Stat Label</Label>
-                        <Input
-                          value={imageStatLabel}
-                          onChange={(e) => setImageStatLabel(e.target.value)}
-                          placeholder="e.g., of businesses"
-                          className="text-sm"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Image preview */}
-                    {post.linkedin_image_url && (
-                      <div className="mt-2">
-                        <Label className="text-xs text-gray-500">Current Image</Label>
-                        <img
-                          src={post.linkedin_image_url}
-                          alt="Current post image"
-                          className="mt-1 w-full rounded border"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
+            {/* The uploaded company image, read-only. Images are attached
+                from the drop zones on the batch page. */}
+            {post.linkedin_image_url && (
+              <div className="space-y-2">
+                <Label className="text-xs uppercase text-gray-500">
+                  Current Image
+                </Label>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={post.linkedin_image_url}
+                  alt="Current post image"
+                  className="w-full rounded border"
+                />
+              </div>
+            )}
 
             {/* LinkedIn Personal Profile */}
             <div className="space-y-2">

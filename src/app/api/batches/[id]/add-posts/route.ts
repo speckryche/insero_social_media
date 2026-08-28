@@ -10,7 +10,6 @@ import {
 import {
   getSupabase,
   categoriesForScope,
-  assignImageTemplate,
   buildAllSlots,
   buildWeekSlots,
   loadTakenSlotsForWeek,
@@ -19,19 +18,11 @@ import {
   SLOTS_PER_WEEK,
   generateCategoryPosts,
   type BatchScope,
-  type ImageTemplateType,
   type GeneratedPost,
   type GenerationGuidance,
 } from "@/lib/batch-generation";
 
 const MAX_ADD = 10;
-
-// Photo templates the personal_take fallback can fill from the post's own copy.
-const PERSONAL_PHOTO_TEMPLATES = new Set([
-  "photo_landscape",
-  "photo_overlay_right",
-  "photo_overlay_left",
-]);
 
 // POST — generate `count` more posts of one category into an existing batch.
 export async function POST(
@@ -43,7 +34,6 @@ export async function POST(
       category: rawCategory,
       count: rawCount,
       useHeadlines = false,
-      includeImages = true,
     } = await request.json();
 
     const count = Number(rawCount);
@@ -223,34 +213,8 @@ export async function POST(
       ...posts.filter((post) => !usesHeadline(post)),
     ];
 
-    // Continue the per-category index so image templates keep rotating rather
-    // than restarting at 0 for every add.
-    const existingInCategory = (existingPosts || []).filter(
-      (p) => p.content_category === category
-    ).length;
-
     const rows = ordered.map((post, i) => {
       const slot = chosenSlots[i];
-      const indexInCategory = existingInCategory + i;
-
-      const image = !includeImages
-        ? { image_template_type: null as ImageTemplateType | null }
-        : assignImageTemplate(category, indexInCategory);
-
-      let imageHeadline = includeImages ? post.image_headline || null : null;
-      let imageBody = includeImages ? post.image_body || null : null;
-
-      // personal_take gets no LLM image fields, so a photo template has to be
-      // filled from the post's own copy — same fallback the batch path uses.
-      if (
-        includeImages &&
-        category === "personal_take" &&
-        image.image_template_type &&
-        PERSONAL_PHOTO_TEMPLATES.has(image.image_template_type)
-      ) {
-        imageHeadline = post.linkedin_personal_content || post.linkedin_content;
-        imageBody = "— Speck Hansen, Insero";
-      }
 
       const index = post.headline_index;
       const headlineItem =
@@ -281,11 +245,6 @@ export async function POST(
         google_content: enabledPlatforms.includes("google")
           ? post.google_content
           : "",
-        image_template_type: image.image_template_type,
-        image_headline: imageHeadline,
-        image_body: imageBody,
-        image_stat_number: includeImages ? post.image_stat_number || null : null,
-        image_stat_label: includeImages ? post.image_stat_label || null : null,
         status: "draft",
         headline_source_url: headlineItem?.source_url || null,
         headline_text: headlineItem?.headline || null,

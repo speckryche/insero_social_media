@@ -28,7 +28,7 @@ export async function POST(
     // Get the current post to know its category and image fields
     const { data: post, error: fetchError } = await supabase
       .from("posts")
-      .select("content_category, linkedin_image_url, image_template_type")
+      .select("content_category")
       .eq("id", params.id)
       .single();
 
@@ -138,18 +138,6 @@ No markdown fences.`,
     }
 
     // Default: regenerate all 5 fields
-    // A post carries image copy when it has an image attached — the URL
-    // column, not the retired has_image flag.
-    const postHasImage = !!post.linkedin_image_url;
-
-    const imageFields = postHasImage
-      ? `\nAlso generate image data:\n- "image_headline": Short headline (max 8 words)\n- "image_body": Supporting text (max 15 words)\n- "image_stat_number": Key stat (e.g., "73%"). Use "" if not applicable.\n- "image_stat_label": Label for stat. Use "" if not applicable.`
-      : "";
-
-    const imageJson = postHasImage
-      ? `,\n  "image_headline": "...",\n  "image_body": "...",\n  "image_stat_number": "...",\n  "image_stat_label": "..."`
-      : "";
-
     const message = await anthropic.messages.create({
       model: "claude-sonnet-5",
       max_tokens: 3000,
@@ -173,14 +161,13 @@ Generate FIVE platform-specific versions:
 4. facebook_content: 100-200 words. Slightly more casual than LinkedIn. 1-2 hashtags max. Can ask questions.
 
 5. google_content: 80-150 words. Informative and local-business focused. Optionally include a CTA to call (844) 252-3185 or visit www.insero.cloud. No hashtags.
-${imageFields}
 Respond with a single JSON object (not an array) with these fields:
 {
   "linkedin_content": "...",
   "linkedin_personal_content": "...",
   "x_content": "...",
   "facebook_content": "...",
-  "google_content": "..."${imageJson}
+  "google_content": "..."
 }
 
 No markdown fences.`,
@@ -209,13 +196,6 @@ No markdown fences.`,
       google_content: generated.google_content,
       status: "draft",
     };
-
-    if (postHasImage) {
-      update.image_headline = generated.image_headline || null;
-      update.image_body = generated.image_body || null;
-      update.image_stat_number = generated.image_stat_number || null;
-      update.image_stat_label = generated.image_stat_label || null;
-    }
 
     const { data, error } = await supabase
       .from("posts")

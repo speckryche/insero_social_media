@@ -221,14 +221,6 @@ function buildBucketAssignments(postCount: number): string {
 
 export type ImageCategory = "ai_speak" | "tech_speak" | "quote_speak" | "cost_speak" | "pots_speak";
 
-const IMAGE_CATEGORIES: ContentCategory[] = [
-  "ai_speak",
-  "tech_speak",
-  "quote_speak",
-  "cost_speak",
-  "pots_speak",
-];
-
 // Settings textareas hold one entry per line. Blank lines and stray spacing
 // are the user's, not the model's problem.
 export function parseListSetting(raw: string | null | undefined): string[] {
@@ -263,7 +255,6 @@ export function buildCategoryPrompt(
   const enabled = enabledPlatforms?.length
     ? enabledPlatforms
     : DEFAULT_ENABLED_PLATFORMS;
-  const hasImages = IMAGE_CATEGORIES.includes(category);
   const isPersonalTake = category === "personal_take";
 
   // Only tech_speak and personal_take draw on headlines, and only from the
@@ -351,28 +342,6 @@ Never use first-person singular. No "I", "me", "my", "DM me". Always we/our/Inse
     ? `2. linkedin_personal_content: **2-5 sentences. Shorter is fine.** If it needs a sixth sentence, cut it down. This is the post — write it in the bucket assigned to it above. First person, Speck's voice, no hashtags, no emojis, no CTAs, no links. Ending on a question to the reader is fine when Speck would actually want the answer.`
     : `2. linkedin_personal_content: 50-120 words. First person ("I"), Speck's voice. No website CTAs. No hashtags. This is for a PERSONAL PROFILE — should feel like a real thought from someone with 20 years in telecom, not a polished post.`;
 
-  const imageFields = hasImages
-    ? `
-Also generate image data for posts that will have branded images. Include these fields for EVERY post (the system will decide which ones actually get images):
-- "image_headline": A punchy, attention-grabbing headline (3-8 words). For QUOTE_CARD templates, this should be a quote-style statement (1-2 sentences). For MYTH_BUSTER templates, this should be the myth stated clearly as a belief (e.g., "Using a broker costs more than going direct").
-- "image_body": Supporting text for the image. IMPORTANT — generate substantial content based on the template type:
-  * For CHECKLIST templates: Generate 3-5 checklist items separated by "|". Each item should be 4-8 words. Example: "Review all line items monthly|Cancel unused phone lines|Compare carrier pricing annually|Check contract renewal dates|Ask about bundling discounts"
-  * For COMPARISON templates: Generate BEFORE and AFTER content separated by "|||". Each side should have 2-3 bullet points separated by "|". Example: "Paying for 12 unused lines|No backup internet|5-year-old phone system|||Only paying for active lines|Redundant internet connection|Modern cloud phone system"
-  * For MYTH_BUSTER templates: Write 1-2 full sentences debunking the myth (20-40 words). Example: "Carriers compensate brokers directly — same as their own reps. You pay nothing and often get better pricing than going direct."
-  * For QUOTE_CARD templates: Write an attribution line. Example: "— Law firm, 15 employees, Portland OR"
-  * For all other templates: Write 1-2 full sentences (15-30 words), not just a short phrase.
-- "image_stat_number": A key number/stat for the image (e.g., "73%", "$4,200", "3x"). Use "" if not applicable.
-- "image_stat_label": Label for the stat (3-6 words, e.g., "saved per year", "of businesses overpay"). Use "" if not applicable.`
-    : "";
-
-  const imageFieldsJson = hasImages
-    ? `,
-  "image_headline": "...",
-  "image_body": "...",
-  "image_stat_number": "...",
-  "image_stat_label": "..."`
-    : "";
-
   // Company CTA rule, per Voice A in the content skill. The closers are
   // plural on purpose — linkedin_content is the company page, so a
   // first-person-singular close would break the company voice rule above.
@@ -452,10 +421,9 @@ ${voiceBBlock}${companyVoiceRule}${headlinesBlock}
 For each of the ${postCount} posts, generate ${versionCount} platform-specific version${platformRules.length === 1 ? "" : "s"}:
 
 ${numberedRules}
-${imageFields}
 Respond with a JSON array of ${postCount} objects. Each object must have exactly these fields:
 {
-${jsonFields}${imageFieldsJson}${headlineFieldJson}
+${jsonFields}${headlineFieldJson}
 }
 
 Use \\n for line breaks inside string values. Never emit a raw newline inside a string.

@@ -28,7 +28,6 @@ import {
   CheckCircle2,
   Edit3,
   RefreshCw,
-  Image as ImageIcon,
   Loader2,
   ArrowLeft,
   Play,
@@ -124,23 +123,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   industry_tip: "Industry Tip",
   myth_busting: "Myth Busting",
 };
-
-// All 12 templates the user can pick from the per-post template selector.
-// 8 canvas templates followed by 4 photo templates.
-const TEMPLATE_OPTIONS = [
-  "stat_card",
-  "quote_card",
-  "tip_graphic",
-  "comparison",
-  "savings_highlight",
-  "myth_buster",
-  "did_you_know",
-  "checklist",
-  "photo_landscape",
-  "photo_tip",
-  "photo_stat",
-  "photo_quote",
-];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Post = any;
@@ -380,7 +362,6 @@ export function BatchReview({
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [previewingPost, setPreviewingPost] = useState<Post | null>(null);
-  const [regeneratingImageId, setRegeneratingImageId] = useState<string | null>(null);
   // Cards show full post text by default. Ids land here only when the user
   // collapses that card back down to a four-line preview.
   const [collapsedPostIds, setCollapsedPostIds] = useState<Set<string>>(new Set());
@@ -643,47 +624,6 @@ export function BatchReview({
       }
     } finally {
       setRegeneratingId(null);
-    }
-  }
-
-  async function handleRegenerateImage(postId: string) {
-    setRegeneratingImageId(postId);
-    try {
-      const res = await fetch(`/api/posts/${postId}/regenerate-image`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setPosts(posts.map((p) => (p.id === postId ? updated : p)));
-      }
-    } finally {
-      setRegeneratingImageId(null);
-    }
-  }
-
-  async function handleChangeTemplate(post: Post, newTemplate: string) {
-    if (newTemplate === post.image_template_type) return;
-    setRegeneratingImageId(post.id);
-    try {
-      const patchRes = await fetch(`/api/posts/${post.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image_template_type: newTemplate,
-          status: post.status,
-        }),
-      });
-      if (!patchRes.ok) return;
-
-      const renderRes = await fetch(`/api/posts/${post.id}/regenerate-image`, {
-        method: "POST",
-      });
-      if (renderRes.ok) {
-        const updated = await renderRes.json();
-        setPosts(posts.map((p) => (p.id === post.id ? updated : p)));
-      }
-    } finally {
-      setRegeneratingImageId(null);
     }
   }
 
@@ -1182,12 +1122,6 @@ export function BatchReview({
                       <CameraOff className="h-4 w-4 text-gray-300" />
                     </span>
                   )}
-                  {post.linkedin_image_url && post.image_template_type && (
-                    <Badge variant="secondary" className="text-xs gap-1">
-                      <ImageIcon className="h-3 w-3" />
-                      {post.image_template_type}
-                    </Badge>
-                  )}
                 </div>
                 <div className="flex items-center gap-1.5">
                   {post.headline_source_url && (
@@ -1304,50 +1238,6 @@ export function BatchReview({
                     onNotice={showNotice}
                   />
                 </div>
-              </div>
-
-              {/* Template controls for a generated company image. The
-                  include-image toggle that used to lead this row is gone —
-                  the drop zones above are the switch now, and an image exists
-                  when its scope's URL column is set. */}
-              <div className="mb-3 flex items-center gap-3 flex-wrap">
-                {post.linkedin_image_url && post.image_template_type && (
-                  <>
-                    <span className="text-xs font-medium text-gray-700">
-                      Generated image
-                    </span>
-                    <Select
-                      value={post.image_template_type || undefined}
-                      onValueChange={(v) => handleChangeTemplate(post, v)}
-                      disabled={regeneratingImageId === post.id}
-                    >
-                      <SelectTrigger className="h-8 w-[170px] text-xs">
-                        <SelectValue placeholder="Template" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TEMPLATE_OPTIONS.map((t) => (
-                          <SelectItem key={t} value={t} className="text-xs">
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs"
-                      onClick={() => handleRegenerateImage(post.id)}
-                      disabled={regeneratingImageId === post.id}
-                    >
-                      {regeneratingImageId === post.id ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      Regenerate Image
-                    </Button>
-                  </>
-                )}
               </div>
 
               {/* Other platform tabs */}

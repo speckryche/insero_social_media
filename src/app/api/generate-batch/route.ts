@@ -12,13 +12,10 @@ import {
   loadTakenSlotsForWeek,
   countFreeSlots,
   allocateByMix,
-  assignImageTemplate,
   buildSchedule,
   interleaveCategories,
   generateCategoryPosts,
-  generateImagesForPost,
   type BatchScope,
-  type ImageTemplateType,
   type GeneratedPost,
   type GenerationGuidance,
 } from "@/lib/batch-generation";
@@ -109,7 +106,6 @@ export async function POST(request: NextRequest) {
       // A week already under way is refused unless the caller means it.
       allowPast = false,
       testMode,
-      includeImages = true,
       scope: rawScope = "both",
       postCount: rawPostCount = DEFAULT_POST_COUNT,
       scanId,
@@ -387,23 +383,9 @@ export async function POST(request: NextRequest) {
     ];
     const postsToSchedule = ordered.slice(0, schedule.length);
 
-    // Test mode template assignments: map category + index-in-category to a specific template
-    const TEST_MODE_TEMPLATES: Record<string, ImageTemplateType[]> = {
-      ai_speak: ["tip_graphic", "photo_tip"],
-      tech_speak: ["checklist", "photo_overlay_right"],
-      quote_speak: ["savings_highlight", "quote_card"],
-      cost_speak: ["comparison", "checklist"],
-      pots_speak: ["checklist", "tip_graphic"],
-      // personal_take gets no LLM image fields, so it only renders correctly
-      // on the photo templates the fallback below fills from the post's own
-      // copy. Anything else would come out with empty text.
-      personal_take: ["photo_overlay_right", "photo_landscape"],
-    };
-
-    // 7. Combine posts with schedule, image assignment, and category.
-    // When includeImages is false, every post is forced text-only and all
-    // image-related columns are nulled out — the assignImageTemplate path
-    // is skipped entirely.
+    // 7. Combine posts with schedule and category. Posts are created with
+    // no image at all now — images arrive later via the per-scope upload
+    // drop zones, which write linkedin_image_url / linkedin_personal_image_url.
     // Resolve a post's 1-based headline_index back to the item it referred to.
     // The index is scoped to the headlines that category was shown.
     const headlineColumnsFor = (
@@ -424,39 +406,6 @@ export async function POST(request: NextRequest) {
 
     const postsToInsert = postsToSchedule.map((item, index) => {
       const sched = schedule[index];
-
-      const image = !includeImages
-        ? { image_template_type: null as ImageTemplateType | null }
-        : testMode
-        ? {
-            image_template_type:
-              TEST_MODE_TEMPLATES[item.category]?.[item.indexInCategory] || "stat_card",
-          }
-        : assignImageTemplate(item.category, item.indexInCategory);
-
-      // personal_take posts don't go through the LLM image-fields path, so
-      // when photo_landscape lands on one we copy the post's own copy into
-      // the image fields. Otherwise the photo template would render with
-      // empty text.
-      let imageHeadline = includeImages ? (item.post.image_headline || null) : null;
-      let imageBody = includeImages ? (item.post.image_body || null) : null;
-      // personal_take posts aren't in IMAGE_CATEGORIES so the LLM didn't
-      // produce image_headline / image_body. When a photo-based template
-      // lands on one, fall back to the post's own copy as the headline.
-      const personalTakePhotoTemplates = new Set([
-        "photo_landscape",
-        "photo_overlay_right",
-        "photo_overlay_left",
-      ]);
-      if (
-        includeImages &&
-        item.category === "personal_take" &&
-        image.image_template_type &&
-        personalTakePhotoTemplates.has(image.image_template_type)
-      ) {
-        imageHeadline = item.post.linkedin_personal_content || item.post.linkedin_content;
-        imageBody = "— Speck Hansen, Insero";
-      }
 
       return {
         batch_id: batch!.id,
@@ -490,21 +439,16 @@ export async function POST(request: NextRequest) {
         google_content: enabledPlatforms.includes("google")
           ? item.post.google_content
           : "",
-        image_template_type: image.image_template_type,
-        image_headline: imageHeadline,
-        image_body: imageBody,
-        image_stat_number: includeImages ? (item.post.image_stat_number || null) : null,
-        image_stat_label: includeImages ? (item.post.image_stat_label || null) : null,
         status: "draft",
         ...headlineColumnsFor(item.category, item.post),
       };
     });
 
     // 8. Insert all posts
-    const { data: insertedPosts, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from("posts")
       .insert(postsToInsert)
-      .select("id, image_template_type, image_headline, image_body, image_stat_number, image_stat_label, content_category");
+      .select("id");
 
     if (insertError) {
       console.error("Post insertion error:", insertError);
@@ -514,35 +458,6 @@ export async function POST(request: NextRequest) {
         { error: "Failed to save posts" },
         { status: 500 }
       );
-    }
-
-    // 9. Render images for posts that were given a template (non-blocking).
-    // Skipped entirely when includeImages is false.
-    if (insertedPosts && includeImages) {
-      const postsWithImages = insertedPosts.filter((p) => p.image_template_type);
-      const baseUrl = request.nextUrl.origin;
-
-      // Fire image generation but don't await — let it run in background
-      Promise.all(
-        postsWithImages.map((p) =>
-          generateImagesForPost(
-            p.id,
-            p.image_template_type,
-            {
-              headline: p.image_headline || "",
-              bodyText: p.image_body || "",
-              statNumber: p.image_stat_number || undefined,
-              statLabel: p.image_stat_label || undefined,
-              category: p.content_category,
-            },
-            baseUrl
-          ).catch((err) => {
-            console.error(`Image gen failed for post ${p.id}:`, err);
-          })
-        )
-      ).catch((err) => {
-        console.error("Batch image generation error:", err);
-      });
     }
 
     return NextResponse.json({

@@ -8,6 +8,12 @@ import {
   type HeadlineItem,
 } from "@/lib/headlines";
 import {
+  NOTES_PER_SCOPE,
+  notesForCategory,
+  type NoteScope,
+  type RealLifeNote,
+} from "@/lib/notes";
+import {
   getSupabase,
   categoriesForScope,
   POST_COUNT_PRESETS,
@@ -16,6 +22,7 @@ import {
   defaultPostTimes,
   allocateByMix,
   interleaveCategories,
+  orderBySource,
   generateCategoryPosts,
   type BatchScope,
   type GeneratedPost,
@@ -149,6 +156,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Unconsumed real-life notes for whichever scopes this batch covers.
+    // Notes are not opt-in the way headlines are — everything waiting in the
+    // pool is offered, and only what a post actually uses gets consumed.
+    //
+    // The filter and ordering match real_life_notes_unconsumed_idx exactly
+    // (scope, note_date desc, where consumed = false), so this rides the
+    // existing partial index.
+    const noteScopes = scanScopesForBatch(scope) as NoteScope[];
+    const { data: noteRows, error: notesError } = await supabase
+      .from("real_life_notes")
+      .select("id, content, note_date, scope")
+      .in("scope", noteScopes)
+      .eq("consumed", false)
+      .order("note_date", { ascending: false });
+
+    if (notesError) {
+      // A notes failure must not sink the batch — headlines and evergreen
+      // material still make a perfectly good batch. Say so and carry on.
+      console.error("[generate-batch] notes fetch failed:", notesError);
+    }
+
+    // Cap per scope, after ordering, so each scope contributes its newest N
+    // rather than one scope crowding the other out of a shared budget.
+    const availableNotes = (noteRows || []) as RealLifeNote[];
+    const notes: RealLifeNote[] = noteScopes.flatMap((noteScope) =>
+      availableNotes
+        .filter((note) => note.scope === noteScope)
+        .slice(0, NOTES_PER_SCOPE[noteScope])
+    );
+
+    console.log(
+      `[generate-batch] offering ${notes.length} notes ` +
+        noteScopes
+          .map(
+            (s) => `${s}=${notes.filter((n) => n.scope === s).length}`
+          )
+          .join(" ")
+    );
+
     const enabledPlatforms = parseEnabledPlatforms(settings.enabled_platforms);
     const guidance: GenerationGuidance = {
       contentNotes: settings.content_notes || "",
@@ -156,6 +202,7 @@ export async function POST(request: NextRequest) {
       speckIsms: settings.speck_isms || "",
       styleSamples: settings.style_samples || "",
       headlines: pickedHeadlines,
+      notes,
       enabledPlatforms,
     };
     console.log(
@@ -185,17 +232,11 @@ export async function POST(request: NextRequest) {
     // 4. Interleave categories for varied daily content
     const interleaved = interleaveCategories(postsByCategory);
 
-    // 5. Trim to the requested size. Posts that reference a headline go
-    //    first — news gets stale, so it takes the low post numbers. Order is
-    //    otherwise the interleave order, which keeps categories varied.
-    const usesHeadline = (item: (typeof interleaved)[number]) =>
-      headlinesForCategory(item.category, pickedHeadlines).length > 0 &&
-      typeof item.post.headline_index === "number";
-
-    const ordered = [
-      ...interleaved.filter(usesHeadline),
-      ...interleaved.filter((item) => !usesHeadline(item)),
-    ];
+    // 5. Trim to the requested size. Notes-backed posts go first, then
+    //    headline-backed, then evergreen — real and perishable material takes
+    //    the low post numbers. The sort is stable, so within each group the
+    //    interleave order stands and categories stay varied.
+    const ordered = orderBySource(interleaved, notes, pickedHeadlines);
     const postsToSchedule = ordered.slice(0, totalPosts);
     const postTimes = defaultPostTimes(settings);
 
@@ -220,7 +261,38 @@ export async function POST(request: NextRequest) {
       };
     };
 
+    // Resolve a post's 1-based note_index back to the note id it referred to,
+    // using the same notesForCategory the prompt builder used so both sides
+    // count the same list. Out of range or non-numeric means no note.
+    const noteIdFor = (
+      category: ContentCategory,
+      post: GeneratedPost
+    ): string | null => {
+      const forCategory = notesForCategory(category, notes);
+      const index = post.note_index;
+      if (typeof index !== "number" || index < 1 || index > forCategory.length) {
+        return null;
+      }
+      return forCategory[index - 1].id;
+    };
+
+    // A note may be claimed once per batch. Company notes are shown to all
+    // five company categories, so two posts landing on the same note is the
+    // expected case, not an anomaly — first post in final order keeps it.
+    const claimedNoteIds = new Set<string>();
+    const claimNote = (
+      category: ContentCategory,
+      post: GeneratedPost
+    ): string | null => {
+      const noteId = noteIdFor(category, post);
+      if (!noteId || claimedNoteIds.has(noteId)) return null;
+      claimedNoteIds.add(noteId);
+      return noteId;
+    };
+
     const postsToInsert = postsToSchedule.map((item, index) => {
+      // Claimed in final order, which is the order this map runs in.
+      const sourceNoteId = claimNote(item.category, item.post);
       return {
         batch_id: batch!.id,
         post_number: index + 1,
@@ -255,7 +327,13 @@ export async function POST(request: NextRequest) {
           ? item.post.google_content
           : "",
         status: "draft",
-        ...headlineColumnsFor(item.category, item.post),
+        source_note_id: sourceNoteId,
+        // Notes are the primary material, so a post that kept a note claim
+        // records no headline even if the model set both indexes. A post that
+        // lost its claim to an earlier post falls back to its headline.
+        ...(sourceNoteId
+          ? { headline_source_url: null, headline_text: null }
+          : headlineColumnsFor(item.category, item.post)),
       };
     });
 
@@ -267,12 +345,42 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       console.error("Post insertion error:", insertError);
-      // Clean up the batch if posts fail
+      // Clean up the batch if posts fail. Notes are deliberately untouched on
+      // this path — nothing landed, so they stay in the pool for next time.
       await supabase.from("batches").delete().eq("id", batch!.id);
       return NextResponse.json(
         { error: "Failed to save posts" },
         { status: 500 }
       );
+    }
+
+    // Consume on use, not on offer: only the notes a post actually claimed are
+    // marked, so anything the model passed over comes back next batch. This
+    // runs after the insert succeeded, so a failed batch consumes nothing.
+    const usedNoteIds = Array.from(claimedNoteIds);
+    if (usedNoteIds.length > 0) {
+      const { error: consumeError } = await supabase
+        .from("real_life_notes")
+        .update({
+          consumed: true,
+          consumed_at: new Date().toISOString(),
+          consumed_by_batch_id: batch!.id,
+        })
+        .in("id", usedNoteIds);
+
+      if (consumeError) {
+        // The batch is already saved and is the thing the user asked for.
+        // A note left unconsumed just reappears next batch, which is a far
+        // better failure than throwing away a batch that generated fine.
+        console.error(
+          "[generate-batch] failed to mark notes consumed:",
+          consumeError
+        );
+      } else {
+        console.log(
+          `[generate-batch] consumed ${usedNoteIds.length} notes into batch ${batchNumber}`
+        );
+      }
     }
 
     return NextResponse.json({

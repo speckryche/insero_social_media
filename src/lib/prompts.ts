@@ -1,5 +1,6 @@
 import { DEFAULT_ENABLED_PLATFORMS, type Platform } from "@/lib/platforms";
 import { headlinesForCategory, type HeadlineItem } from "@/lib/headlines";
+import { notesForCategory, type RealLifeNote } from "@/lib/notes";
 
 export const INSERO_SYSTEM_PROMPT = `You are a social media content writer for Insero, a technology brokerage based in the Pacific Northwest. The owner is Speck Hansen.
 
@@ -244,6 +245,7 @@ export interface CategoryPromptOptions {
   styleSamples?: string | null;
   enabledPlatforms?: Platform[];
   headlines?: HeadlineItem[];
+  notes?: RealLifeNote[];
 }
 
 export function buildCategoryPrompt(
@@ -251,16 +253,51 @@ export function buildCategoryPrompt(
   postCount: number = 12,
   options: CategoryPromptOptions = {}
 ): string {
-  const { speckIsms, styleSamples, enabledPlatforms, headlines } = options;
+  const { speckIsms, styleSamples, enabledPlatforms, headlines, notes } =
+    options;
   const enabled = enabledPlatforms?.length
     ? enabledPlatforms
     : DEFAULT_ENABLED_PLATFORMS;
   const isPersonalTake = category === "personal_take";
 
+  // Real-life notes are the primary material. Company notes reach all five
+  // company categories; personal notes reach personal_take. The same helper
+  // runs again at write-back time, so note_index resolves to the same note.
+  const categoryNotes = notesForCategory(category, notes || []);
+  const hasNotes = categoryNotes.length > 0;
+
   // Only tech_speak and personal_take draw on headlines, and only from the
   // feeds that suit them. Everything else never sees the list.
   const categoryHeadlines = headlinesForCategory(category, headlines || []);
   const hasHeadlines = categoryHeadlines.length > 0;
+
+  // Company notes are written down from real customer situations, so they
+  // carry a confidentiality line the personal ones do not need.
+  const noteConfidentialityNote = isPersonalTake
+    ? ""
+    : `
+These notes come from real customer situations. Never name or identify the
+customer. Write the pattern, not the person.
+`;
+
+  const notesBlock = hasNotes
+    ? `
+REAL-LIFE NOTES — things that actually happened, written down by Speck.
+These are the best material available. Prefer them over headlines.
+${categoryNotes
+  .map((note, i) => `${i + 1}. [${note.note_date}] ${note.content}`)
+  .join("\n")}
+
+Ground the post in what the note actually says. Expand the thought, but never
+invent details that are not in the note — no invented dialogue, no invented
+customer or company names, no invented numbers, no invented outcome. If a note
+is too thin to carry a post on its own, leave it and write something else.
+
+Use at most one note per post. Not every post needs one. When a post uses a
+note, set "note_index" to that note's number above and set "headline_index"
+to null. When it does not, set "note_index" to null.
+${noteConfidentialityNote}`
+    : "";
 
   const headlineUsageNote = isPersonalTake
     ? 'Crypto headlines belong in the "Crypto, sparked" bucket. AI and tech headlines can feed "Built this week" or "Awkward moments" when they genuinely fit.'
@@ -415,15 +452,16 @@ What's the trickiest thing you've run into with carrier quotes?"`,
     .join(",\n");
 
   const headlineFieldJson = hasHeadlines ? `,\n  "headline_index": null` : "";
+  const noteFieldJson = hasNotes ? `,\n  "note_index": null` : "";
 
   return `${categoryPrompt}
-${voiceBBlock}${companyVoiceRule}${headlinesBlock}
+${voiceBBlock}${companyVoiceRule}${notesBlock}${headlinesBlock}
 For each of the ${postCount} posts, generate ${versionCount} platform-specific version${platformRules.length === 1 ? "" : "s"}:
 
 ${numberedRules}
 Respond with a JSON array of ${postCount} objects. Each object must have exactly these fields:
 {
-${jsonFields}${headlineFieldJson}
+${jsonFields}${noteFieldJson}${headlineFieldJson}
 }
 
 Use \\n for line breaks inside string values. Never emit a raw newline inside a string.

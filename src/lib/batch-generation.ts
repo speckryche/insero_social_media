@@ -20,8 +20,10 @@ import {
   escapeRawControlCharsInStrings,
 } from "@/lib/json-repair";
 import {
+  headlinesForCategory,
   type HeadlineItem,
 } from "@/lib/headlines";
+import { notesForCategory, type RealLifeNote } from "@/lib/notes";
 import { POST_COUNT_PRESETS, DEFAULT_POST_COUNT } from "@/lib/post-count";
 
 // Re-exported so server-side callers can keep importing the batch shape from
@@ -160,6 +162,9 @@ export interface GeneratedPost {
   google_content: string;
   // 1-based index into the headlines shown to this category, or null.
   headline_index?: number | null;
+  // 1-based index into the notes shown to this category, or null. Its own
+  // namespace: note 1 and headline 1 are unrelated.
+  note_index?: number | null;
 }
 
 export function isWeekend(date: Date): boolean {
@@ -225,6 +230,8 @@ export interface GenerationGuidance {
   styleSamples?: string;
   enabledPlatforms?: Platform[];
   headlines?: HeadlineItem[];
+  // Unconsumed real-life notes, already capped per scope by the caller.
+  notes?: RealLifeNote[];
 }
 
 export async function generateCategoryPosts(
@@ -281,6 +288,7 @@ export async function generateCategoryPosts(
             styleSamples: guidance.styleSamples,
             enabledPlatforms: guidance.enabledPlatforms,
             headlines: guidance.headlines,
+            notes: guidance.notes,
           }),
         },
       ],
@@ -366,6 +374,56 @@ export async function generateCategoryPosts(
     google_content: post.google_content ?? "",
     headline_index:
       typeof post.headline_index === "number" ? post.headline_index : null,
+    note_index:
+      typeof post.note_index === "number" ? post.note_index : null,
   }));
+}
+
+// Where a post's material came from, which is also its sort rank. Notes are
+// real and perishable, headlines are news, everything else is evergreen — so
+// the low post numbers go to the material that goes stale fastest.
+export type PostSource = "note" | "headline" | "evergreen";
+
+export function postSource(
+  category: ContentCategory,
+  post: GeneratedPost,
+  notes: RealLifeNote[],
+  headlines: HeadlineItem[]
+): PostSource {
+  if (
+    typeof post.note_index === "number" &&
+    notesForCategory(category, notes).length > 0
+  ) {
+    return "note";
+  }
+  if (
+    typeof post.headline_index === "number" &&
+    headlinesForCategory(category, headlines).length > 0
+  ) {
+    return "headline";
+  }
+  return "evergreen";
+}
+
+const SOURCE_RANK: Record<PostSource, number> = {
+  note: 0,
+  headline: 1,
+  evergreen: 2,
+};
+
+/**
+ * Notes-backed posts first, then headline-backed, then the rest.
+ *
+ * A stable sort, so the round-robin interleave still decides the order inside
+ * each of the three groups and categories stay varied day to day.
+ */
+export function orderBySource<
+  T extends { category: ContentCategory; post: GeneratedPost }
+>(items: T[], notes: RealLifeNote[], headlines: HeadlineItem[]): T[] {
+  return [...items].sort(
+    (a, b) =>
+      SOURCE_RANK[postSource(a.category, a.post, notes, headlines)] -
+      SOURCE_RANK[postSource(b.category, b.post, notes, headlines)]
+  );
 }
 

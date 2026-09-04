@@ -189,9 +189,20 @@ const NUMBER_WORDS: Record<number, string> = {
 export const CLOSER_EXAMPLES = `"We can help with that." / "That's a five-minute review for us." / "If that line's on your bill, we'd look at it for free." / "Happy to check yours." / "Ask us before you sign."`;
 
 /**
- * The Voice A soft-close rule, shared by batch generation and single-post
- * regeneration so the two cannot drift. Both end on "never a link in the body",
- * which is what the skill file says and what the /audit CTA used to violate.
+ * Google Business Profile posts are built to carry a CTA with a link and a
+ * phone number — that is the medium, not a style choice, which is why the
+ * no-body-link rule below does not reach them. Shared with the regenerate
+ * route so the two paths produce the same instruction.
+ */
+export const GOOGLE_CTA = `Optionally include a CTA to call (844) 252-3185 or visit www.insero.cloud.`;
+
+/**
+ * The Voice A soft-close rule for **linkedin_content only**, shared by batch
+ * generation and single-post regeneration so the two cannot drift.
+ *
+ * "Never a link in the body" is a LinkedIn convention and is scoped here
+ * accordingly: google_content uses GOOGLE_CTA instead, and x_content and
+ * facebook_content carry their own platform rules.
  *
  * A batch states the rule as a proportion and forbids reusing a closer across
  * the set. A regenerated post has no set to apportion across or repeat within,
@@ -346,10 +357,10 @@ Never use first-person singular. No "I", "me", "my", "DM me". Always we/our/Inse
     ? `2. linkedin_personal_content: **2-5 sentences. Shorter is fine.** If it needs a sixth sentence, cut it down. This is the post — write it in the bucket assigned to it above. First person, Speck's voice, no hashtags, no emojis, no CTAs, no links. Ending on a question to the reader is fine when Speck would actually want the answer.`
     : `2. linkedin_personal_content: 50-120 words. First person ("I"), Speck's voice. No website CTAs. No hashtags. This is for a PERSONAL PROFILE — should feel like a real thought from someone with 20 years in telecom, not a polished post.`;
 
-  const ctaRule = buildCtaRule(postCount);
-
-  const linkedinCtaNote = ctaRule;
-  const googleCtaNote = ctaRule;
+  // LinkedIn takes the soft-close rule with its no-body-link clause; Google
+  // takes the CTA its format is built for. They are deliberately different.
+  const linkedinCtaNote = buildCtaRule(postCount);
+  const googleCtaNote = GOOGLE_CTA;
 
   // Use the base category prompt but replace "Generate 12" with actual count
   const categoryPrompt = CATEGORY_PROMPTS[category].replace(/Generate 12/g, `Generate ${postCount}`);

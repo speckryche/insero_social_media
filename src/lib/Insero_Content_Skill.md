@@ -31,7 +31,8 @@ Every post is written in exactly one of these. Never blend them.
 - Perspective: always **we / our / Insero**. Never "I". Never name Speck.
 - Structure: hook line → 2–4 short sentences or a tight bullet list → optional soft close
 - Hashtags: none. The post text names the topic plainly; that's what LinkedIn reads now.
-- CTA: about half of company posts end with a one-line soft close, but only when the post set up a problem Insero actually solves. Pure explainers end on the explanation. Never a link in the body (links go in the first comment or the page profile). Rotate closers so it never reads like a signature: "We can help with that." / "That's a five-minute review for us." / "If that line's on your bill, we'd look at it for free." / "Happy to check yours." / "Ask us before you sign." Write new ones in the same spirit; never the same closer twice in a batch.
+- CTA: about half of company posts end with a one-line soft close, but only when the post set up a problem Insero actually solves. Pure explainers end on the explanation. Rotate closers so it never reads like a signature: "We can help with that." / "That's a five-minute review for us." / "If that line's on your bill, we'd look at it for free." / "Happy to check yours." / "Ask us before you sign." Write new ones in the same spirit; never the same closer twice in a batch.
+- Links: this is per platform, not a blanket ban. **LinkedIn** — never a link in the body; links go in the first comment or the page profile. **X** — never a URL. **Facebook** — no link in the body. **Google Business Profile** — the exception: that format is built to carry a CTA, so a Google post may end on one with the phone number and www.insero.cloud.
 - Tone: warm, direct, confident. Like a knowledgeable friend, not a vendor.
 
 ### Voice B — Speck's personal profile

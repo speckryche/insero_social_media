@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
-import { ContentCategory, CATEGORY_PROMPTS, buildCtaRule } from "@/lib/prompts";
+import {
+  ContentCategory,
+  CATEGORY_PROMPTS,
+  buildCtaRule,
+  GOOGLE_CTA,
+} from "@/lib/prompts";
 import { CONTENT_SKILL } from "@/lib/content-skill";
 
 // The same voice definition batch generation uses. Regeneration used to carry
@@ -176,7 +181,7 @@ Generate FIVE platform-specific versions:
 
 4. facebook_content: 100-200 words. Slightly more casual than LinkedIn. No hashtags. Can ask questions.
 
-5. google_content: 80-150 words. Informative and local-business focused. Optionally include a CTA to call (844) 252-3185 or visit www.insero.cloud. No hashtags.
+5. google_content: 80-150 words. Informative and local-business focused. ${GOOGLE_CTA} No hashtags.
 Respond with a single JSON object (not an array) with these fields:
 {
   "linkedin_content": "...",

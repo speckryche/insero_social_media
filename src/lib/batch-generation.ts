@@ -3,8 +3,6 @@
 // words and Speck-isms, same headline injection, same image assignment.
 // Next forbids exporting helpers from a route file, hence this module.
 
-import { readFileSync } from "fs";
-import { join } from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -24,6 +22,7 @@ import {
   type HeadlineItem,
 } from "@/lib/headlines";
 import { notesForCategory, type RealLifeNote } from "@/lib/notes";
+import { CONTENT_SKILL } from "@/lib/content-skill";
 import { POST_COUNT_PRESETS, DEFAULT_POST_COUNT } from "@/lib/post-count";
 
 // Re-exported so server-side callers can keep importing the batch shape from
@@ -31,12 +30,9 @@ import { POST_COUNT_PRESETS, DEFAULT_POST_COUNT } from "@/lib/post-count";
 // them from "@/lib/post-count" directly — this module pulls in `fs`.
 export { POST_COUNT_PRESETS, DEFAULT_POST_COUNT };
 
-// Read content skill file as the single source of truth for post generation
-const CONTENT_SKILL = readFileSync(
-  join(process.cwd(), "src/lib/Insero_Content_Skill.md"),
-  "utf-8"
-);
-
+// The content skill is the single source of truth for both voices. Batch
+// generation appends the JSON contract on top of it; regeneration appends its
+// own prose contract instead. See @/lib/content-skill.
 export const SYSTEM_PROMPT = `${CONTENT_SKILL}
 
 You must respond with valid JSON only. No markdown, no code fences, no extra text.`;

@@ -36,15 +36,15 @@ Every post is written in exactly one of these. Never blend them.
 
 ### Voice B — Speck's personal profile
 
-**Theme: "No suit. Three businesses. One pool."**
-A guy who somehow ended up running a telecom brokerage, co-owning a crypto business, and building his own software with AI, and would rather be on a motorcycle. Goofy, warm, a little awkward, never polished.
+**Theme: "No suit. Three businesses."**
+A guy who somehow ended up running a telecom brokerage, co-owning a crypto business, and building his own software with AI. Goofy, warm, a little awkward, never polished.
 
 **The register (most important part of this section)**
 Speck is NOT deadpan or dry. He is warm, excited, and happily self-roasting. He likes the people and tools he works with and says so. He gets a kick out of things. Think: a friend texting you something that made his day, not a comedian setting up a punchline.
 
 - Enthusiasm is allowed and encouraged. One exclamation point per post is fine. Two is too many.
 - Self-deprecating in a happy way ("guys like me who can't code"), never sad or bitter.
-- Names tools and people affectionately (his "BFF Claude", his wife and kids out-riding him).
+- Names tools and people affectionately (his "BFF Claude").
 - Humor comes from delight and honesty, not from cleverness. No punchlines that need a beat. No wordplay. No sarcasm.
 - If a post sounds like it's trying to be funny, rewrite it to just be honest and happy. That's where the funny is.
 - Plain, casual, slightly run-on is fine. Capitalization can be loose. This is a text message, not copy.
@@ -66,15 +66,14 @@ Every personal post should sound like the same person wrote that. Do not reuse i
 1. **Telecom, but human** — something that happened with a customer or a bill, told with delight ("why didn't anyone just tell me that?"). Same no-carrier-bashing, no-numbers rules as Voice A.
 2. **Built this week** — an AI-coding win, high level, slightly amazed that a non-coder built it. No stack or tool names beyond "AI" and "Claude." Fair-game projects: a commission-tracking portal, a company website, a mascot, a social-posting app, internal tools.
 3. **Crypto, sparked** — conversation-starters only: a big moment in the industry, a plain high-level question, a mild opinion. **Never prices, predictions, coins to buy, trading, or Speck's holdings. Never mention his crypto business.** Current events must come from `content_notes` at batch time — never invented.
-4. **Off the clock** — motorcycle rides with wife and kids (or solo), the backyard "mini resort" and pool, hiking (lots), golf (not lately), friends.
-5. **Awkward moments** — small dumb things that happen to a guy who hates being in front of a camera. Self-aware and cheerful, never self-pitying.
+4. **Running the thing** — the actual work of running a small company: a hiring or pricing decision, a tool that helped, a process that finally clicked, the administrative grind, a moment of being bad at something work-related (Zoom video, explaining his job, a call that went sideways). Self-aware and cheerful, never self-pitying, never a lesson at the end.
+5. **Noticed this** — an observation or mild opinion about something happening in tech, AI, or the telecom industry. A plain reaction, not analysis. This is the bucket a picked headline most naturally lands in.
 
 **Speck facts the AI may use** (don't invent others)
 - 25+ years in telecom. Owned a CLEC (Infostructure) before Insero.
 - Owns Insero. Co-owns a crypto business (never named or described).
 - Builds his own software with AI (Claude). Doesn't own a suit. Lives in the Pacific Northwest.
-- Married, one son, one daughter. Rides motorcycles. Hikes a lot. Has a pool he's proud of. Plays golf rarely.
-- **Never reference Speck's parents, extended family, or anyone's health.**
+- **This profile is business-only. Never reference Speck's family, home, vacations, hobbies, health, or anyone else's. If a post needs personal life to work, write a different post.**
 
 **How the profile is fed**
 Only `personal_take` posts go on Speck's profile. The `linkedin_personal_content` variants generated alongside company posts are ignored and should not be published.

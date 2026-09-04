@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
-import { INSERO_SYSTEM_PROMPT, ContentCategory, CATEGORY_PROMPTS } from "@/lib/prompts";
+import { ContentCategory, CATEGORY_PROMPTS } from "@/lib/prompts";
+import { CONTENT_SKILL } from "@/lib/content-skill";
+
+// The same voice definition batch generation uses. Regeneration used to carry
+// its own older copy, which drifted: it encouraged personal-life material in
+// Voice B, said 20 years where the skill says 25+, and allowed hashtags the
+// skill bans. One definition now, with only the output contract differing —
+// every path here returns a single JSON object, not the array a batch returns.
+const REGENERATE_SYSTEM_PROMPT = `${CONTENT_SKILL}
+
+You must respond with a single valid JSON object. No markdown, no code fences, no extra text.`;
 
 function getSupabase() {
   return createClient(
@@ -49,7 +59,7 @@ export async function POST(
         model: "claude-sonnet-5",
         max_tokens: 1000,
         output_config: { effort: "low" },
-        system: INSERO_SYSTEM_PROMPT,
+        system: REGENERATE_SYSTEM_PROMPT,
         messages: [
           {
             role: "user",
@@ -57,7 +67,7 @@ export async function POST(
 
 Category description: ${categoryDescription}
 
-Write a SHORT post (50-150 words) for a personal LinkedIn profile. Casual, first-person voice. No CTAs to website. Skip hashtags or use 1 max. Should feel like a quick thought from a telecom consultant.
+Write a SHORT post (50-150 words) for a personal LinkedIn profile. Casual, first-person voice. No CTAs to website. No hashtags. Should feel like a quick thought from a telecom consultant.
 
 Respond with a single JSON object with one field:
 { "linkedin_personal_content": "..." }
@@ -96,7 +106,7 @@ No markdown fences.`,
         model: "claude-sonnet-5",
         max_tokens: 1000,
         output_config: { effort: "low" },
-        system: INSERO_SYSTEM_PROMPT,
+        system: REGENERATE_SYSTEM_PROMPT,
         messages: [
           {
             role: "user",
@@ -104,7 +114,7 @@ No markdown fences.`,
 
 Category description: ${categoryDescription}
 
-Write a professional but conversational post (150-300 words) for a company LinkedIn page. Use line breaks for readability. 2-3 hashtags max. Optionally include a CTA to www.insero.cloud/audit.
+Write a professional but conversational post (150-300 words) for a company LinkedIn page. Use line breaks for readability. No hashtags. Optionally include a CTA to www.insero.cloud/audit.
 
 Respond with a single JSON object with one field:
 { "linkedin_content": "..." }
@@ -142,7 +152,7 @@ No markdown fences.`,
       model: "claude-sonnet-5",
       max_tokens: 3000,
       output_config: { effort: "low" },
-      system: INSERO_SYSTEM_PROMPT,
+      system: REGENERATE_SYSTEM_PROMPT,
       messages: [
         {
           role: "user",
@@ -152,13 +162,13 @@ Category description: ${categoryDescription}
 
 Generate FIVE platform-specific versions:
 
-1. linkedin_content: 150-300 words. Professional but conversational. 2-3 hashtags max. For COMPANY PAGE. Optionally include a CTA to www.insero.cloud/audit.
+1. linkedin_content: 150-300 words. Professional but conversational. No hashtags. For COMPANY PAGE. Optionally include a CTA to www.insero.cloud/audit.
 
-2. linkedin_personal_content: 50-150 words. Casual, first-person voice. No CTAs to website. 1 hashtag max. For PERSONAL PROFILE.
+2. linkedin_personal_content: 50-150 words. Casual, first-person voice. No CTAs to website. No hashtags. For PERSONAL PROFILE.
 
-3. x_content: Under 280 characters. Punchy, direct, no hashtags unless truly relevant. Never include URLs.
+3. x_content: Under 280 characters. Punchy, direct, no hashtags. Never include URLs.
 
-4. facebook_content: 100-200 words. Slightly more casual than LinkedIn. 1-2 hashtags max. Can ask questions.
+4. facebook_content: 100-200 words. Slightly more casual than LinkedIn. No hashtags. Can ask questions.
 
 5. google_content: 80-150 words. Informative and local-business focused. Optionally include a CTA to call (844) 252-3185 or visit www.insero.cloud. No hashtags.
 Respond with a single JSON object (not an array) with these fields:

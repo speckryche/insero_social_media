@@ -183,6 +183,30 @@ const NUMBER_WORDS: Record<number, string> = {
   5: "FIVE",
 };
 
+// Company CTA rule, per Voice A in the content skill. The closers are plural
+// on purpose — linkedin_content is the company page, so a first-person-singular
+// close would break the company voice rule.
+export const CLOSER_EXAMPLES = `"We can help with that." / "That's a five-minute review for us." / "If that line's on your bill, we'd look at it for free." / "Happy to check yours." / "Ask us before you sign."`;
+
+/**
+ * The Voice A soft-close rule, shared by batch generation and single-post
+ * regeneration so the two cannot drift. Both end on "never a link in the body",
+ * which is what the skill file says and what the /audit CTA used to violate.
+ *
+ * A batch states the rule as a proportion and forbids reusing a closer across
+ * the set. A regenerated post has no set to apportion across or repeat within,
+ * so it gets the same rule phrased for a single post.
+ */
+export function buildCtaRule(postCount: number): string {
+  if (postCount === 1) {
+    return `End on a one-line soft close only if the post set up a problem Insero actually solves — a pure explainer ends on the explanation. Never a link in the body. Write a fresh closer in the same spirit as these rather than reusing one verbatim: ${CLOSER_EXAMPLES}`;
+  }
+
+  return `About half of the posts (${Math.round(
+    postCount * 0.5
+  )} out of ${postCount}) end with a one-line soft close, but only when the post set up a problem Insero actually solves. Pure explainers end on the explanation. Never a link in the body. Rotate the closers so it never reads like a signature — write new ones in the same spirit as these, and never use the same closer twice in this batch: ${CLOSER_EXAMPLES}`;
+}
+
 export interface CategoryPromptOptions {
   speckIsms?: string | null;
   styleSamples?: string | null;
@@ -322,14 +346,7 @@ Never use first-person singular. No "I", "me", "my", "DM me". Always we/our/Inse
     ? `2. linkedin_personal_content: **2-5 sentences. Shorter is fine.** If it needs a sixth sentence, cut it down. This is the post — write it in the bucket assigned to it above. First person, Speck's voice, no hashtags, no emojis, no CTAs, no links. Ending on a question to the reader is fine when Speck would actually want the answer.`
     : `2. linkedin_personal_content: 50-120 words. First person ("I"), Speck's voice. No website CTAs. No hashtags. This is for a PERSONAL PROFILE — should feel like a real thought from someone with 20 years in telecom, not a polished post.`;
 
-  // Company CTA rule, per Voice A in the content skill. The closers are
-  // plural on purpose — linkedin_content is the company page, so a
-  // first-person-singular close would break the company voice rule above.
-  const CLOSER_EXAMPLES = `"We can help with that." / "That's a five-minute review for us." / "If that line's on your bill, we'd look at it for free." / "Happy to check yours." / "Ask us before you sign."`;
-
-  const ctaRule = `About half of the posts (${Math.round(
-    postCount * 0.5
-  )} out of ${postCount}) end with a one-line soft close, but only when the post set up a problem Insero actually solves. Pure explainers end on the explanation. Never a link in the body. Rotate the closers so it never reads like a signature — write new ones in the same spirit as these, and never use the same closer twice in this batch: ${CLOSER_EXAMPLES}`;
+  const ctaRule = buildCtaRule(postCount);
 
   const linkedinCtaNote = ctaRule;
   const googleCtaNote = ctaRule;

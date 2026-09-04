@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
-import { ContentCategory, CATEGORY_PROMPTS } from "@/lib/prompts";
+import { ContentCategory, CATEGORY_PROMPTS, buildCtaRule } from "@/lib/prompts";
 import { CONTENT_SKILL } from "@/lib/content-skill";
 
 // The same voice definition batch generation uses. Regeneration used to carry
@@ -12,6 +12,12 @@ import { CONTENT_SKILL } from "@/lib/content-skill";
 const REGENERATE_SYSTEM_PROMPT = `${CONTENT_SKILL}
 
 You must respond with a single valid JSON object. No markdown, no code fences, no extra text.`;
+
+// The same soft-close rule batch generation uses, phrased for one post. It
+// replaced an "optionally include a CTA to www.insero.cloud/audit" instruction
+// that contradicted the skill file twice over: Voice A never puts a link in the
+// body, and "audit" is banned in visible copy.
+const CTA_RULE = buildCtaRule(1);
 
 function getSupabase() {
   return createClient(
@@ -67,7 +73,7 @@ export async function POST(
 
 Category description: ${categoryDescription}
 
-Write a SHORT post (50-150 words) for a personal LinkedIn profile. Casual, first-person voice. No CTAs to website. No hashtags. Should feel like a quick thought from a telecom consultant.
+Write a SHORT post (50-150 words) for a personal LinkedIn profile. Casual, first-person voice. No CTAs. No links. No hashtags. Should feel like a quick thought from a telecom consultant.
 
 Respond with a single JSON object with one field:
 { "linkedin_personal_content": "..." }
@@ -114,7 +120,7 @@ No markdown fences.`,
 
 Category description: ${categoryDescription}
 
-Write a professional but conversational post (150-300 words) for a company LinkedIn page. Use line breaks for readability. No hashtags. Optionally include a CTA to www.insero.cloud/audit.
+Write a professional but conversational post (150-300 words) for a company LinkedIn page. Use line breaks for readability. No hashtags. ${CTA_RULE}
 
 Respond with a single JSON object with one field:
 { "linkedin_content": "..." }
@@ -162,9 +168,9 @@ Category description: ${categoryDescription}
 
 Generate FIVE platform-specific versions:
 
-1. linkedin_content: 150-300 words. Professional but conversational. No hashtags. For COMPANY PAGE. Optionally include a CTA to www.insero.cloud/audit.
+1. linkedin_content: 150-300 words. Professional but conversational. No hashtags. For COMPANY PAGE. ${CTA_RULE}
 
-2. linkedin_personal_content: 50-150 words. Casual, first-person voice. No CTAs to website. No hashtags. For PERSONAL PROFILE.
+2. linkedin_personal_content: 50-150 words. Casual, first-person voice. No CTAs. No links. No hashtags. For PERSONAL PROFILE.
 
 3. x_content: Under 280 characters. Punchy, direct, no hashtags. Never include URLs.
 

@@ -1,0 +1,46 @@
+-- 031_platform_tokens_enable_rls.sql
+-- Enables row level security on platform_tokens.
+--
+-- RECORD OF APPLIED SQL -- DO NOT RUN. This was applied directly against the
+-- project (ref drlcwshqqpnurxtewrrx) and is already live. This file exists so
+-- the repo's migration history matches the database. Same convention as 021.
+--
+-- Why: platform_tokens holds the live LinkedIn and Google OAuth credentials --
+-- access_token, refresh_token, expires_at -- for the two seeded rows. RLS was
+-- off, so the table was fully readable and writable by the anon and
+-- authenticated roles. NEXT_PUBLIC_SUPABASE_ANON_KEY ships to the browser by
+-- design, which meant anyone holding it could read those tokens straight out
+-- of PostgREST and post as the company page.
+--
+-- No policies are added, intentionally. Every code path that touches this
+-- table builds its client with SUPABASE_SERVICE_ROLE_KEY, which bypasses RLS
+-- entirely:
+--   src/lib/publishers/linkedin.ts       (read, refresh-write, re-read)
+--   src/lib/publishers/google.ts         (read, refresh-write)
+--   scripts/check-linkedin-token.mjs     (read)
+--   scripts/clean-linkedin-token.mjs     (read, write, re-read)
+-- Nothing reads it through an anon or authenticated client, there are no
+-- views, functions, triggers or foreign keys referencing it, and it is not in
+-- a realtime publication. So RLS with zero policies denies exactly the access
+-- that should never have existed and nothing else. Publishing was verified
+-- unaffected.
+--
+-- Add a policy here only if a browser or user-scoped client ever needs this
+-- table -- with no policy, any non-service-role read silently returns zero
+-- rows rather than erroring, which is easy to misdiagnose.
+--
+-- Rollback:
+--   ALTER TABLE public.platform_tokens DISABLE ROW LEVEL SECURITY;
+--
+-- STILL OUTSTANDING: the other 7 public tables remain RLS-disabled and are
+-- exposed to the anon key the same way --
+--   posts, batches, app_settings, publish_logs, learn_runs, headline_scans,
+--   real_life_notes
+-- These cannot simply be switched on. Unlike platform_tokens, the app reads
+-- them through the anon-key SSR client in src/lib/supabase/server.ts, so
+-- enabling RLS without policies would blank out the dashboard, review queue,
+-- notes and logs. Policies need to be designed first -- most likely
+-- authenticated-role read/write, since this is a single-tenant internal tool
+-- with no per-user row ownership.
+
+ALTER TABLE public.platform_tokens ENABLE ROW LEVEL SECURITY;

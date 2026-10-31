@@ -17,7 +17,7 @@ const H = 1080;
 const OUT_DIR = path.join(process.cwd(), "src", "assets", "templates");
 
 const COLORS = {
-  forestGreen: "#008038",
+  forestGreen: "#008838",
   forestGreenDark: "#005C28",
   forestGreenDarker: "#004020",
   forestGreenLight: "#1FA855",

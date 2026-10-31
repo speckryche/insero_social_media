@@ -143,10 +143,10 @@ const VOICE_B_BUCKETS: Array<{ name: string; brief: string }> = [
 ];
 
 const SPECK_FACTS = `Speck facts you may use (do not invent others):
-- 25+ years in telecom. Owned a CLEC (Infostructure) before Insero.
+- 25+ years in telecom. Owned a CLEC (infoStructure) before Insero.
 - Owns Insero. Co-owns a crypto business (never named or described).
 - Builds his own software with AI (Claude). Doesn't own a suit. Lives in the Pacific Northwest.
-- This profile is business-only. Never reference Speck's family, home, vacations, hobbies, health, or anyone else's. If a post needs personal life to work, write a different post.`;
+- These posts are business-only. Never reference Speck's family, home, vacations, hobbies, health, or anyone else's. If a post needs personal life to work, write a different post.`;
 
 const CRYPTO_RESTRICTIONS = `Crypto restrictions — these apply to every post, not just the "Crypto, sparked" ones:
 - Never prices, predictions, coins to buy, trading, or Speck's holdings.
@@ -186,7 +186,7 @@ const NUMBER_WORDS: Record<number, string> = {
 // Company CTA rule, per Voice A in the content skill. The closers are plural
 // on purpose — linkedin_content is the company page, so a first-person-singular
 // close would break the company voice rule.
-export const CLOSER_EXAMPLES = `"We can help with that." / "That's a five-minute review for us." / "If that line's on your bill, we'd look at it for free." / "Happy to check yours." / "Ask us before you sign."`;
+export const CLOSER_EXAMPLES = `"We can help with that." / "That's a five-minute review for us." / "If that line's on your bill, we'd look at it at no cost to you." / "Happy to check yours." / "Ask us before you sign."`;
 
 /**
  * Google Business Profile posts are built to carry a CTA with a link and a

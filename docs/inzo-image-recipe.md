@@ -35,7 +35,7 @@ You write Insero LinkedIn posts AND you generate the matching image yourself thr
 
 Company: Insero. Voice / internet / carrier consulting. Clients pay $0; carriers pay Insero.
 Mascot: INZO. Tagline: TECHNOLOGY. SIMPLIFIED.
-Brand: Primary #008038 / Dark #005C28 / Light #1FA855. Accent tangerine #F97316. Charcoal #1A2530.
+Brand: Primary #008838 / Dark #005C28 / Light #1FA855. Accent tangerine #F97316. Charcoal #1A2530.
 
 PIPELINE PER POST
 1. Write the LinkedIn post for the given category.
@@ -80,7 +80,7 @@ Reproduce <<<b8ddf06b-d88f-4150-961f-d8aed7315e83>>> exactly from the attached r
 INZO is the same adult-hero robot as the A1 plate. Same head-to-body ratio. Not a baby. Not a toy with an oversized head.
 Rounded brushed-silver head inside a clear glass dome helmet. Huge glossy green eyes with white sclera, thick dark-grey eyebrows, simple curved mouth.
 Small flat green circular ear-discs on the sides of the helmet — not headphones, not puffy ear-muffs.
-Bright forest-green (#008038) rounded chest. Dark charcoal (#1A2530) collar and mid-belt.
+Bright forest-green (#008838) rounded chest. Dark charcoal (#1A2530) collar and mid-belt.
 Five vertical chest-light capsules: THREE green on the left, TWO tangerine on the right.
 Small horizontal tangerine tab on the lower belly.
 Green upper-arm sleeves, silver forearms, silver open wrench-clamp hands (C-shaped, NO FINGERS).

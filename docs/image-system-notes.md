@@ -7,7 +7,8 @@ Supplements `CC-PROMPT-image-system-rebuild.md` (the 12-step build prompt).
 - **Company page** — a generated stylized-3D scene of a real business place
   in brand green, with the INZO mascot composited in from a transparent PNG,
   and one auto-fitting headline drawn on canvas. New scene every post.
-- **Personal profile** — photoreal, warm 35mm, no mascot, no text. Must also
+- **Personal profile** — photoreal, warm 35mm, no text. INZO can appear
+  (decided Oct 30, 2026); don't overuse him. Must also
   accept a photo Speck uploads himself, or no image at all.
 - The old 14-template canvas system and all 8 Canva backgrounds are deleted.
 - INZO is **composited, never generated** — zero character drift, zero cost.

@@ -207,7 +207,7 @@ Only these may be referenced. Do not invent others.
 
 - Scott Anderson, Kelley Create — approved testimonial (use the approved wording from insero.cloud)
 - Tom Pepple, Retail Profit Systems — approved testimonial (use the approved wording from insero.cloud)
-- James Sandberg, Coming Attractions Theatres — approved testimonial (use the approved wording from insero.cloud). Coming Attractions is also approved to be named in stories: 17 analog phone lines moved to Ooma AirDial. No savings figure.
+- James Sandberg, Coming Attractions Theatres — approved testimonial (use the approved wording from insero.cloud). Coming Attractions is also approved to be named in stories: 17 analog phone lines moved to Ooma AirDial, and we cut their phone costs in half (customer-approved by James Sandberg, Oct 2026). Use the figure as stated; don't turn it into a percentage or a promise for other customers.
 
 No customer names, deal sizes, or outcomes beyond these.
 
